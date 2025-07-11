@@ -114,7 +114,7 @@ const HomePage = ({ darkMode, setDarkMode }) => {
                 >
                   <div className="category-image">
                     <img 
-                      //src={category.imageUrl || `/images/category-${category.name.toLowerCase()}.jpg`} 
+                      src={category.imageUrl || '/images/default-category.jpg'} 
                       alt={category.name}
                       onError={(e) => {
                         e.target.src = '/images/default-category.jpg';

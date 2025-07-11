@@ -75,6 +75,17 @@ export const CartProvider = ({ children }) => {
     fetchCartFromBackend();
   }, [isLoggedIn, userId]);
 
+  // Otomatik yenileme - her 5 saniyede bir sepeti güncelle
+  useEffect(() => {
+    if (!isLoggedIn || !userId) return;
+
+    const interval = setInterval(() => {
+      fetchCartFromBackend();
+    }, 5000); // 5 saniye
+
+    return () => clearInterval(interval);
+  }, [isLoggedIn, userId]);
+
   const cartTotal = cartItems.reduce(
     (total, item) => total + (item.price * item.quantity), 0
   );

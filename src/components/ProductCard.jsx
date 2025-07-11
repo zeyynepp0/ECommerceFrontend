@@ -4,12 +4,13 @@ import { FiHeart, FiShoppingCart, FiStar } from 'react-icons/fi';
 import axios from 'axios';
 import { useUser } from './UserContext';
 import { useCart } from './CartContext';
+import { useFavorites } from './FavoriteContext';
 import '../css/ProductCard.css';
 
 const ProductCard = ({ product, darkMode, onFavoriteChange }) => {
   const { userId, isLoggedIn } = useUser();
-  const { addToCart } = useCart();
-  const [isFavorited, setIsFavorited] = useState(false);
+  const { addToCart, fetchCartFromBackend } = useCart();
+  const { favorites, toggleFavorite, fetchFavorites } = useFavorites();
   const [isLoading, setIsLoading] = useState(false);
   const [isAddingToCart, setIsAddingToCart] = useState(false);
 
@@ -21,76 +22,35 @@ const ProductCard = ({ product, darkMode, onFavoriteChange }) => {
     ? Math.round((1 - price / discount) * 100)
     : null;
 
-  // Check if product is favorited on component mount
-  useEffect(() => {
-    if (isLoggedIn && userId) {
-      checkFavoriteStatus();
-    }
-  }, [userId, isLoggedIn, product.id]);
-
-  const checkFavoriteStatus = async () => {
-    try {
-      const token = localStorage.getItem('token');
-      const response = await axios.get(`https://localhost:7098/api/Favorite/check/${userId}/${product.id}`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      setIsFavorited(response.data.isFavorited);
-    } catch (error) {
-      console.error('Favori durumu kontrol edilemedi:', error);
-    }
-  };
+  // Check if product is favorited
+  const isFavorited = favorites.some(fav => fav.productId === product.id);
 
   const handleFavoriteClick = async (e) => {
-  e.preventDefault();
-  e.stopPropagation();
+    e.preventDefault();
+    e.stopPropagation();
 
-  if (!isLoggedIn) {
-    alert('Favorilere eklemek için giriş yapmalısınız!');
-    return;
-  }
+    if (!isLoggedIn) {
+      alert('Favorilere eklemek için giriş yapmalısınız!');
+      return;
+    }
 
-  setIsLoading(true);
-  const token = localStorage.getItem('token');
-
-  const payload = {
-    UserId: parseInt(userId),
-    ProductId: parseInt(product.id)
+    setIsLoading(true);
+    try {
+      await toggleFavorite(product.id);
+      
+      // Header'ı güncelle
+      fetchFavorites();
+      
+      if (onFavoriteChange) {
+        onFavoriteChange();
+      }
+    } catch (error) {
+      console.error('Favori işlemi başarısız:', error.response?.data || error.message);
+      alert('Favori işlemi başarısız oldu!');
+    } finally {
+      setIsLoading(false);
+    }
   };
-
-  try {
-    if (isFavorited) {
-      await axios.delete('https://localhost:7098/api/Favorite/remove', {
-        headers: {
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        },
-        data: payload
-      });
-      setIsFavorited(false);
-    } else {
-      await axios.post('https://localhost:7098/api/Favorite/add', payload, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        }
-      });
-      setIsFavorited(true);
-    }
-
-    if (onFavoriteChange) {
-      onFavoriteChange(); // Favori sekmesinde otomatik güncelleme tetikle
-    }
-  } catch (error) {
-    console.error('Favori işlemi başarısız:', error.response?.data || error.message);
-    alert('Favori işlemi başarısız oldu!');
-  } finally {
-    setIsLoading(false);
-  }
-};
-
-
-
-
 
   const handleAddToCart = async (e) => {
     e.preventDefault();
@@ -106,7 +66,7 @@ const ProductCard = ({ product, darkMode, onFavoriteChange }) => {
       const token = localStorage.getItem('token');
       
       // Backend'e sepete ekle
-      const response = await axios.post('http://localhost:7098/api/CartItem', {
+      const response = await axios.post('https://localhost:7098/api/CartItem', {
         userId: userId,
         productId: product.id,
         quantity: 1
@@ -127,6 +87,9 @@ const ProductCard = ({ product, darkMode, onFavoriteChange }) => {
           quantity: 1
         };
         addToCart(cartItem);
+        
+        // Header'ı güncelle
+        fetchCartFromBackend();
         
         // Başarı mesajı
         alert('Ürün sepete eklendi!');
@@ -158,7 +121,13 @@ const ProductCard = ({ product, darkMode, onFavoriteChange }) => {
       </button>
 
       <Link to={`/products/${product.id}`} className="product-image">
-        <img src={product.imageUrl || product.image} alt={product.name} />
+        <img 
+          src={product.imageUrl || product.image || '/images/default-product.jpg'} 
+          alt={product.name}
+          onError={(e) => {
+            e.target.src = '/images/default-product.jpg';
+          }}
+        />
       </Link>
 
       <div className="product-info">

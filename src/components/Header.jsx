@@ -25,6 +25,7 @@ import '../css/Header.css';
 import Modal from 'react-modal';
 import { useCart } from './CartContext';
 import { useUser } from './UserContext';
+import { useFavorites } from './FavoriteContext';
 import axios from 'axios';
 
 Modal.setAppElement('#root');
@@ -36,11 +37,10 @@ const Header = ({ darkMode, setDarkMode }) => {
   const [showDropdown, setShowDropdown] = useState(false);
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [authMode, setAuthMode] = useState('login');
-  const [favorites, setFavorites] = useState([]);
   const navigate = useNavigate();
-  const { cartItems } = useCart();
+  const { cartItems, fetchCartFromBackend } = useCart();
   const { isLoggedIn, logout, userId } = useUser();
-  
+  const { favoritesCount, fetchFavorites } = useFavorites();
 
   const openAuthModal = (mode) => {
     setAuthMode(mode);
@@ -66,34 +66,21 @@ const Header = ({ darkMode, setDarkMode }) => {
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
 
-  // Favorileri çek
+  // Sayfa değiştiğinde header'ı güncelle
   useEffect(() => {
     if (isLoggedIn && userId) {
-      const fetchFavorites = async () => {
-        try {
-          const token = localStorage.getItem('token');
-          const response = await fetch(`https://localhost:7098/api/Favorite/user/${userId}`, {
-            headers: { Authorization: `Bearer ${token}` }
-          });
-          if (response.ok) {
-            const data = await response.json();
-            setFavorites(data || []);
-          } else {
-            console.error('Favoriler yüklenemedi:', response.status);
-            setFavorites([]);
-          }
-        } catch (error) {
-          console.error('Favoriler yüklenemedi:', error);
-          setFavorites([]);
-        }
-      };
+      fetchCartFromBackend();
       fetchFavorites();
-    } else {
-      setFavorites([]);
     }
-  }, [isLoggedIn, userId]);
+  }, [isLoggedIn, userId, fetchCartFromBackend, fetchFavorites]);
 
-
+  // Manuel yenileme fonksiyonu
+  const refreshHeader = () => {
+    if (isLoggedIn && userId) {
+      fetchCartFromBackend();
+      fetchFavorites();
+    }
+  };
 
   // Arama işlemi
   const handleSearch = () => {
@@ -121,7 +108,7 @@ const Header = ({ darkMode, setDarkMode }) => {
             >
               {darkMode ? <FiSun size={20} /> : <FiMoon size={20} />}
             </button>
-            <Link to="/" className="logo">
+            <Link to="/" className="logo" onClick={refreshHeader}>
               {darkMode ? (
                 <span className="logo-text">SHOP<span className="logo-highlight">DARK</span></span>
               ) : (
@@ -197,6 +184,7 @@ const Header = ({ darkMode, setDarkMode }) => {
                       </Link>
                       <Link to={`/profile/${userId}?tab=favorites`} className="dropdown-item">
                         <FiHeart size={16} />
+                        
                         <span>Favorilerim</span>
                       </Link>
                       <button 
@@ -212,13 +200,13 @@ const Header = ({ darkMode, setDarkMode }) => {
               )}
             </div>
             
-            <Link to={`/profile/${userId}?tab=favorites`} className="header-icon" aria-label="Favoriler">
+            <Link to={`/profile/${userId}?tab=favorites`} className="header-icon" aria-label="Favoriler" onClick={refreshHeader}>
               <FiHeart size={20} />
               <span className="icon-label">Favoriler</span>
-              <span className="icon-badge">{favorites.length}</span>
+              <span className="icon-badge">{favoritesCount}</span>
             </Link>
             
-            <Link to="/cart" className="header-icon cart" aria-label="Sepet">
+            <Link to="/cart" className="header-icon cart" aria-label="Sepet" onClick={refreshHeader}>
               <FiShoppingCart size={20} />
               <span className="icon-label">Sepet</span>
               <span className="icon-badge">{cartItems.length}</span>
@@ -232,7 +220,7 @@ const Header = ({ darkMode, setDarkMode }) => {
           <nav className="main-nav">
             <ul className="nav-list">
               <li className="nav-item">
-                <Link to="/" className="nav-link">
+                <Link to="/" className="nav-link" onClick={refreshHeader}>
                   <FiHome size={16} />
                   Ana Sayfa
                 </Link>
@@ -241,28 +229,28 @@ const Header = ({ darkMode, setDarkMode }) => {
 
               
               <li className="nav-item">
-                <Link to="/products" className="nav-link">
+                <Link to="/products" className="nav-link" onClick={refreshHeader}>
                   <AiOutlineProduct size={16} />
                   Tüm Ürünler
                 </Link>
               </li>
               
               <li className="nav-item">
-                <Link to="/products?discount=true" className="nav-link">
+                <Link to="/products?discount=true" className="nav-link" onClick={refreshHeader}>
                   <FiPercent size={16} />
                   İndirimler
                 </Link>
               </li>
               
               <li className="nav-item">
-                <Link to="/about" className="nav-link">
+                <Link to="/about" className="nav-link" onClick={refreshHeader}>
                   <FiInfo size={16} />
                   Hakkımızda
                 </Link>
               </li>
               
               <li className="nav-item">
-                <Link to="/contact" className="nav-link">
+                <Link to="/contact" className="nav-link" onClick={refreshHeader}>
                   <FiMail size={16} />
                   İletişim
                 </Link>

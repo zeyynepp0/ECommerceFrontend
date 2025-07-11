@@ -14,7 +14,7 @@ import CartPage from './page/CartPage';
 import CheckoutPage from './page/CheckoutPage';
 import { useUser } from './components/UserContext';
 import { UserProvider } from './components/UserContext';
-
+import { FavoriteProvider } from './components/FavoriteContext';
 import ProfilePage from './page/ProfilePage';
 
 const API = axios.create({
@@ -32,6 +32,7 @@ function App() {
 
 
   return (
+    <FavoriteProvider>
     <UserProvider>
     <CartProvider>
     <Router>
@@ -57,6 +58,7 @@ function App() {
     </Router>
     </CartProvider>
     </UserProvider>
+    </FavoriteProvider>
      
   );
 }

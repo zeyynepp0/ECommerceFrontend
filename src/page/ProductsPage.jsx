@@ -18,7 +18,6 @@ const ProductsPage = ({ darkMode }) => {
   const [filteredProducts, setFilteredProducts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [categories, setCategories] = useState([]);
-  const [favorites, setFavorites] = useState([]);
   const [filters, setFilters] = useState({
     searchQuery: '',
     minPrice: '',
@@ -145,49 +144,11 @@ const ProductsPage = ({ darkMode }) => {
     navigate('/products');
   };
 
-  useEffect(() => {
-  const token = localStorage.getItem('token');
-  const userId = localStorage.getItem('userId');
-
-  if (!token || !userId) return;
-
-  const fetchFavorites = async () => {
-    try {
-      const res = await axios.get(`https://localhost:7098/api/Favorite/user/${userId}`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      setFavorites(res.data);
-    } catch (err) {
-      console.error('Favoriler alınamadı:', err);
-    }
+  // Favori değişikliği callback'i
+  const handleFavoriteChange = () => {
+    // Favori değişikliği olduğunda yapılacak işlemler
+    console.log('Favori değişikliği algılandı');
   };
-
-  fetchFavorites();
-}, []);
-
-
-// Favori değişikliği callback'i
- const handleFavoriteClick = async () => {
-  const token = localStorage.getItem('token');
-
-  try {
-    const res = await axios.post("https://localhost:7098/api/Favorite/add", {
-      userId: userId,
-      productId: productId
-    }, {
-      headers: {
-        Authorization: `Bearer ${token}`,
-        'Content-Type': 'application/json'
-      }
-    });
-
-    console.log("Favoriye eklendi:", res.data);
-  } catch (error) {
-    console.error("Favori işlemi başarısız:", error.response?.data || error.message);
-  }
-};
-
-
 
   return (
     <div className={`products-page ${darkMode ? 'dark' : ''}`}>
@@ -297,10 +258,7 @@ const ProductsPage = ({ darkMode }) => {
                   key={product.id} 
                   product={product} 
                   darkMode={darkMode}
-                  favorites={favorites}
-                  setFavorites={setFavorites}
-                  onFavoriteChange={handleFavoriteClick}
-                  
+                  onFavoriteChange={handleFavoriteChange}
                 />
               ))}
             </div>

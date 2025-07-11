@@ -19,11 +19,13 @@ import ReviewItem from '../components/ReviewItem';
 import '../css/ProductDetailsPage.css';
 import { useCart } from '../components/CartContext';
 import { useUser } from '../components/UserContext';
+import { useFavorites } from '../components/FavoriteContext';
 
 const ProductDetailsPage = ({ darkMode }) => {
   const { id } = useParams();
   const navigate = useNavigate();
   const { userId, isLoggedIn } = useUser();
+  const { favorites, toggleFavorite, fetchFavorites } = useFavorites();
   const [product, setProduct] = useState(null);
   const [loading, setLoading] = useState(true);
   const [selectedImage, setSelectedImage] = useState(0);
@@ -31,11 +33,13 @@ const ProductDetailsPage = ({ darkMode }) => {
   const [relatedProducts, setRelatedProducts] = useState([]);
   const [reviews, setReviews] = useState([]);
   const [showReviewForm, setShowReviewForm] = useState(false);
-  const [isFavorited, setIsFavorited] = useState(false);
   const [isFavoriteLoading, setIsFavoriteLoading] = useState(false);
-  const { addToCart } = useCart();
+  const { addToCart, fetchCartFromBackend } = useCart();
   const images = product?.imageUrl ? [product.imageUrl] : [];
   const mainImage = images[selectedImage] || product?.imageUrl || '';
+
+  // Check if product is favorited
+  const isFavorited = favorites.some(fav => fav.productId === parseInt(id));
 
   // Ürün detaylarını, ilgili ürünleri ve yorumları çek
   useEffect(() => {
@@ -66,25 +70,6 @@ const ProductDetailsPage = ({ darkMode }) => {
     }
   }, [id]);
 
-  // Favori durumunu kontrol et
-  useEffect(() => {
-    if (isLoggedIn && userId && product) {
-      checkFavoriteStatus();
-    }
-  }, [userId, isLoggedIn, product]);
-
-  const checkFavoriteStatus = async () => {
-    try {
-      const token = localStorage.getItem('token');
-      const response = await axios.get(`https://localhost:7098/api/Favorite/check/${userId}/${product.id}`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      setIsFavorited(response.data.isFavorited);
-    } catch (error) {
-      console.error('Favori durumu kontrol edilemedi:', error);
-    }
-  };
-
   const handleFavoriteClick = async () => {
     if (!isLoggedIn) {
       alert('Favorilere eklemek için giriş yapmalısınız!');
@@ -93,25 +78,10 @@ const ProductDetailsPage = ({ darkMode }) => {
 
     setIsFavoriteLoading(true);
     try {
-      const token = localStorage.getItem('token');
+      await toggleFavorite(parseInt(id));
       
-      if (isFavorited) {
-        // Remove from favorites
-        await axios.delete('https://localhost:7098/api/Favorite/remove', {
-          headers: { Authorization: `Bearer ${token}` },
-          data: { UserId: userId, ProductId: product.id }
-        });
-        setIsFavorited(false);
-      } else {
-        // Add to favorites
-        await axios.post('https://localhost:7098/api/Favorite/add', {
-          UserId: userId,
-          ProductId: product.id
-        }, {
-          headers: { Authorization: `Bearer ${token}` }
-        });
-        setIsFavorited(true);
-      }
+      // Header'ı güncelle
+      fetchFavorites();
     } catch (error) {
       console.error('Favori işlemi başarısız:', error);
       alert('Favori işlemi başarısız oldu!');
@@ -156,6 +126,9 @@ const ProductDetailsPage = ({ darkMode }) => {
           quantity: quantity
         };
         addToCart(item);
+        
+        // Header'ı güncelle
+        fetchCartFromBackend();
         
         // Başarı mesajı
         alert('Ürün sepete eklendi!');
@@ -248,7 +221,7 @@ const ProductDetailsPage = ({ darkMode }) => {
             )}
             <div className="main-image">
               <img 
-               // src={mainImage || '/images/default-product.jpg'} 
+                src={mainImage || '/images/default-product.jpg'} 
                 alt={product.name}
                 onError={(e) => {
                   e.target.src = '/images/default-product.jpg';
@@ -415,7 +388,13 @@ const ProductDetailsPage = ({ darkMode }) => {
               {relatedProducts.map(product => (
                 <div key={product.id} className="related-product-card">
                   <Link to={`/products/${product.id}`} className="related-product-image">
-                    <img src={product.imageUrl || '/images/default-product.jpg'} alt={product.name} />
+                    <img 
+                      src={product.imageUrl || '/images/default-product.jpg'} 
+                      alt={product.name}
+                      onError={(e) => {
+                        e.target.src = '/images/default-product.jpg';
+                      }}
+                    />
                   </Link>
                   <div className="related-product-info">
                     <h3>
