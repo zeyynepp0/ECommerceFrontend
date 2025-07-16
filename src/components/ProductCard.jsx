@@ -9,13 +9,14 @@ import '../css/ProductCard.css';
 
 const ProductCard = ({ product, darkMode, onFavoriteChange }) => {
   const { userId, isLoggedIn } = useUser();
-  const { addToCart, fetchCartFromBackend } = useCart();
+  const { addToCart, fetchCartFromBackend, cartItems } = useCart();
   const { favorites, toggleFavorite, fetchFavorites } = useFavorites();
   const [isLoading, setIsLoading] = useState(false);
   const [isAddingToCart, setIsAddingToCart] = useState(false);
 
   const price = typeof product.price === 'number' ? product.price : null;
   const discount = typeof product.discount === 'number' ? product.discount : null;
+  const stock = typeof product.stock === 'number' ? product.stock : 0;
 
   const hasValidDiscount = price !== null && discount !== null && discount > price;
   const discountPercent = hasValidDiscount
@@ -24,6 +25,10 @@ const ProductCard = ({ product, darkMode, onFavoriteChange }) => {
 
   // Check if product is favorited
   const isFavorited = favorites.some(fav => fav.productId === product.id);
+
+  // Sepetteki mevcut miktarı bul
+  const cartItem = cartItems.find(item => item.id === product.id);
+  const cartQuantity = cartItem ? cartItem.quantity : 0;
 
   const handleFavoriteClick = async (e) => {
     e.preventDefault();
@@ -37,10 +42,8 @@ const ProductCard = ({ product, darkMode, onFavoriteChange }) => {
     setIsLoading(true);
     try {
       await toggleFavorite(product.id);
-      
       // Header'ı güncelle
       fetchFavorites();
-      
       if (onFavoriteChange) {
         onFavoriteChange();
       }
@@ -61,10 +64,19 @@ const ProductCard = ({ product, darkMode, onFavoriteChange }) => {
       return;
     }
 
+    // Stok kontrolü
+    if (stock === 0) {
+      alert('Bu ürün stokta yok!');
+      return;
+    }
+    if (cartQuantity >= stock) {
+      alert(`Stok yetersiz! Bu üründen maksimum ${stock} adet ekleyebilirsiniz.`);
+      return;
+    }
+
     setIsAddingToCart(true);
     try {
       const token = localStorage.getItem('token');
-      
       // Backend'e sepete ekle
       const response = await axios.post('https://localhost:7098/api/CartItem', {
         userId: userId,
@@ -87,10 +99,8 @@ const ProductCard = ({ product, darkMode, onFavoriteChange }) => {
           quantity: 1
         };
         addToCart(cartItem);
-        
         // Header'ı güncelle
         fetchCartFromBackend();
-        
         // Başarı mesajı
         alert('Ürün sepete eklendi!');
       }
@@ -165,10 +175,10 @@ const ProductCard = ({ product, darkMode, onFavoriteChange }) => {
         <button 
           className={`add-to-cart ${isAddingToCart ? 'loading' : ''}`}
           onClick={handleAddToCart}
-          disabled={isAddingToCart}
+          disabled={isAddingToCart || stock === 0 || cartQuantity >= stock}
         >
           <FiShoppingCart size={16} />
-          {isAddingToCart ? 'Ekleniyor...' : 'Sepete Ekle'}
+          {stock === 0 ? 'Stokta Yok' : (isAddingToCart ? 'Ekleniyor...' : 'Sepete Ekle')}
         </button>
       </div>
     </div>

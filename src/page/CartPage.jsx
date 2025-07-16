@@ -54,31 +54,68 @@ const CartPage = ({ darkMode }) => {
     setCartTotal(total);
   };
 
-  const updateQuantity = async (cartItemId, newQuantity) => {
+  const updateQuantity = async (cartItemId, newQuantity, productId) => {
     if (newQuantity < 1) return;
+
+    const cartItem = cartItems.find(item => item.id === cartItemId);
+    if (!cartItem) return;
+    const stock = typeof cartItem.product?.stock === 'number' ? cartItem.product.stock : 0;
+    const currentQuantity = cartItem.quantity || 1;
+
+    if (newQuantity > stock) {
+      alert(`Stok yetersiz! Bu üründen maksimum ${stock} adet ekleyebilirsiniz.`);
+      return;
+    }
 
     try {
       const token = localStorage.getItem('token');
-      const response = await fetch(`https://localhost:7098/api/CartItem/${cartItemId}`, {
-        method: 'PUT',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          id: cartItemId,
-          quantity: newQuantity
-        })
-      });
-
-      if (response.ok) {
-        fetchUserCart(); // Sepeti yenile
-        fetchCartFromBackend(); // CartContext'i güncelle
-      } else {
-        console.error('Miktar güncellenemedi:', response.status);
+      if (newQuantity > currentQuantity) {
+        // Fark kadar ekle
+        const diff = newQuantity - currentQuantity;
+        const response = await fetch('https://localhost:7098/api/CartItem', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            userId: userId,
+            productId: productId,
+            quantity: diff
+          })
+        });
+        if (!response.ok) throw new Error();
+      } else if (newQuantity < currentQuantity) {
+        // Azaltma için: önce sil, sonra yeni miktarla ekle
+        // 1. Ürünü sil
+        await fetch(`https://localhost:7098/api/CartItem/${cartItemId}`, {
+          method: 'DELETE',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          }
+        });
+        // 2. Yeni miktar > 0 ise tekrar ekle
+        if (newQuantity > 0) {
+          const response = await fetch('https://localhost:7098/api/CartItem', {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${token}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              userId: userId,
+              productId: productId,
+              quantity: newQuantity
+            })
+          });
+          if (!response.ok) throw new Error();
+        }
       }
+      await fetchUserCart();
+      fetchCartFromBackend();
     } catch (error) {
-      console.error('Miktar güncellenirken hata:', error);
+      alert('Miktar güncellenirken bir hata oluştu!');
     }
   };
 
@@ -160,47 +197,61 @@ const CartPage = ({ darkMode }) => {
       ) : (
         <div className="cart-content">
           <div className="cart-items">
-            {cartItems.map(item => (
-              <div key={item.id} className="cart-item">
-                <img 
-                  src={item.product?.imageUrl || '/images/default-product.jpg'} 
-                  alt={item.product?.name || 'Ürün'} 
-                  className="cart-item-image"
-                  onError={(e) => {
-                    e.target.src = '/images/default-product.jpg';
-                  }}
-                />
-                <div className="cart-item-info">
-                  <h4>{item.product?.name || 'Ürün İsmi Yok'}</h4>
-                  <p className="cart-item-price">{(item.product?.price || 0).toFixed(2)}₺</p>
-                  <div className="cart-item-qty">
-                    <button 
-                      onClick={() => updateQuantity(item.id, (item.quantity || 1) - 1)} 
-                      disabled={(item.quantity || 1) <= 1}
-                      className="qty-btn"
+            {cartItems.map(item => {
+              const stock = typeof item.product?.stock === 'number' ? item.product.stock : 0;
+              const currentQuantity = item.quantity || 1;
+              const itemTotal = (item.product?.price || 0) * currentQuantity;
+              
+              return (
+                <div key={item.id} className="cart-item">
+                  <img 
+                    src={item.product?.imageUrl || '/images/default-product.jpg'} 
+                    alt={item.product?.name || 'Ürün'} 
+                    className="cart-item-image"
+                    onClick={() => navigate(`/products/${item.product?.id}`)}
+                    style={{ cursor: 'pointer' }}
+                    onError={(e) => {
+                      e.target.src = '/images/default-product.jpg';
+                    }}
+                  />
+                  <div className="cart-item-info">
+                    <h4 
+                      style={{ cursor: 'pointer', color: '#007bff', textDecoration: 'underline' }}
+                      onClick={() => navigate(`/products/${item.product?.id}`)}
                     >
-                      -
-                    </button>
-                    <span>{item.quantity || 1}</span>
+                      {item.product?.name || 'Ürün İsmi Yok'}
+                    </h4>
+                    <p className="cart-item-price">{(item.product?.price || 0).toFixed(2)}₺</p>
+                    <div className="cart-item-qty">
+                      <button 
+                        onClick={() => updateQuantity(item.id, currentQuantity - 1, item.product?.id)} 
+                        disabled={currentQuantity <= 1}
+                        className="qty-btn"
+                      >
+                        -
+                      </button>
+                      <span>{currentQuantity}</span>
+                      <button 
+                        onClick={() => updateQuantity(item.id, currentQuantity + 1, item.product?.id)}
+                        className="qty-btn"
+                        disabled={currentQuantity >= stock}
+                      >
+                        +
+                      </button>
+                    </div>
+                    <p className="cart-item-total">
+                      {itemTotal.toFixed(2)}₺
+                    </p>
                     <button 
-                      onClick={() => updateQuantity(item.id, (item.quantity || 1) + 1)}
-                      className="qty-btn"
+                      onClick={() => removeFromCart(item.id)}
+                      className="btn-remove"
                     >
-                      +
+                      Kaldır
                     </button>
                   </div>
-                  <p className="cart-item-total">
-                    {((item.product?.price || 0) * (item.quantity || 1)).toFixed(2)}₺
-                  </p>
-                  <button 
-                    onClick={() => removeFromCart(item.id)}
-                    className="btn-remove"
-                  >
-                    Kaldır
-                  </button>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
           <div className="cart-summary">
             <h3>Sipariş Özeti</h3>

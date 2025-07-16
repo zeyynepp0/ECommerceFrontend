@@ -4,6 +4,7 @@ import { useUser } from '../components/UserContext';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useSearchParams } from 'react-router-dom';
 import '../css/ProfilePage.css';
+import { useFavorites } from '../components/FavoriteContext';
 
 const ProfilePage = () => {
   const { userId: contextUserId, isLoggedIn } = useUser();
@@ -20,6 +21,9 @@ const ProfilePage = () => {
   const [searchParams] = useSearchParams();
 const tabFromUrl = searchParams.get('tab');
 const [activeTab, setActiveTab] = useState(tabFromUrl || 'profile');
+
+  const { removeFavorite, favorites: contextFavorites } = useFavorites();
+  const [favoriteProducts, setFavoriteProducts] = useState([]);
 
 
   useEffect(() => {
@@ -59,6 +63,30 @@ const [activeTab, setActiveTab] = useState(tabFromUrl || 'profile');
   useEffect(() => {
   setActiveTab(tabFromUrl);
 }, [tabFromUrl]);
+
+  useEffect(() => {
+    const fetchFavoriteProducts = async () => {
+      if (!favorites || favorites.length === 0) {
+        setFavoriteProducts([]);
+        return;
+      }
+      try {
+        const token = localStorage.getItem('token');
+        const productDetails = await Promise.all(
+          favorites.map(async fav => {
+            const res = await axios.get(`https://localhost:7098/api/Product/${fav.productId}`, {
+              headers: { Authorization: `Bearer ${token}` }
+            });
+            return res.data;
+          })
+        );
+        setFavoriteProducts(productDetails);
+      } catch (err) {
+        setFavoriteProducts([]);
+      }
+    };
+    fetchFavoriteProducts();
+  }, [favorites]);
 
   const handleUserChange = (e) => {
     setUser({ ...user, [e.target.name]: e.target.value });
@@ -124,17 +152,6 @@ const [activeTab, setActiveTab] = useState(tabFromUrl || 'profile');
       console.error('Adres silme hatası:', err);
       alert('Adres silinemedi.');
     }
-  };
-
-  const removeFavorite = async (productId) => {
-    const token = localStorage.getItem('token');
-    const headers = { Authorization: `Bearer ${token}` };
-    await axios.delete(`https://localhost:7098/api/Favorite/remove/user/${userId}`, {
-      headers,
-      data: { userId, productId },
-    });
-    const refreshed = await axios.get(`https://localhost:7098/api/Favorite/user/${userId}`, { headers });
-    setFavorites(refreshed.data);
   };
 
   const addEmptyAddress = () => {
@@ -386,24 +403,35 @@ const [activeTab, setActiveTab] = useState(tabFromUrl || 'profile');
           {activeTab === 'favorites' && (
             <div className="favorites-section card">
               <h2>Favorilerim</h2>
-              {favorites.length === 0 ? (
+              {favoriteProducts.length === 0 ? (
                 <div className="empty-state">
                   <i className="icon-heart-o"></i>
                   <p>Henüz favori ürününüz bulunmamaktadır.</p>
                 </div>
               ) : (
                 <div className="favorites-grid">
-                  {favorites.map(fav => (
-                    <div key={fav.productId} className="favorite-item">
+                  {favoriteProducts.map(product => (
+                    <div 
+                      key={product.id} 
+                      className="favorite-item"
+                      style={{ cursor: 'pointer' }}
+                      onClick={() => navigate(`/products/${product.id}`)}
+                    >
                       <div className="favorite-image">
-                        <img src={fav.product?.imageUrl || 'https://via.placeholder.com/150'} alt={fav.product?.name} />
+                        <img 
+                          src={product.imageUrl || '/images/default-product.jpg'} 
+                          alt={product.name} 
+                          onError={e => { e.target.src = '/images/default-product.jpg'; }}
+                        />
                       </div>
                       <div className="favorite-details">
-                        <h3>{fav.product?.name}</h3>
-                        <p className="description">{fav.product?.description}</p>
-                        <p className="price">{fav.product?.price} TL</p>
+                        <h3>{product.name} <span style={{fontWeight: 'normal', fontSize: '0.9em', color: '#888'}}>#{product.id}</span></h3>
+                        <p className="description">{product.description}</p>
+                        <p className="price">Fiyat: {product.price} TL</p>
+                        <p className="stock">Stok: {product.stock}</p>
+                        <p className="category">Kategori: {product.category?.name}</p>
                         <button 
-                          onClick={() => removeFavorite(fav.productId)}
+                          onClick={e => { e.stopPropagation(); removeFavorite(product.id); }}
                           className="remove-button"
                         >
                           <i className="icon-trash"></i> Favorilerden Kaldır

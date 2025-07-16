@@ -32,8 +32,8 @@ function App() {
 
 
   return (
-    <FavoriteProvider>
     <UserProvider>
+    <FavoriteProvider>
     <CartProvider>
     <Router>
       <div className={`app ${darkMode ? 'dark' : ''}`}></div>
@@ -57,9 +57,8 @@ function App() {
     
     </Router>
     </CartProvider>
-    </UserProvider>
     </FavoriteProvider>
-     
+     </UserProvider>
   );
 }
 

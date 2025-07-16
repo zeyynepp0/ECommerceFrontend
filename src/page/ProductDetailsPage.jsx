@@ -34,12 +34,17 @@ const ProductDetailsPage = ({ darkMode }) => {
   const [reviews, setReviews] = useState([]);
   const [showReviewForm, setShowReviewForm] = useState(false);
   const [isFavoriteLoading, setIsFavoriteLoading] = useState(false);
-  const { addToCart, fetchCartFromBackend } = useCart();
+  const { addToCart, fetchCartFromBackend, cartItems } = useCart();
   const images = product?.imageUrl ? [product.imageUrl] : [];
   const mainImage = images[selectedImage] || product?.imageUrl || '';
 
   // Check if product is favorited
   const isFavorited = favorites.some(fav => fav.productId === parseInt(id));
+
+  // Stok ve sepetteki miktar
+  const stock = typeof product?.stock === 'number' ? product.stock : 0;
+  const cartItem = cartItems.find(item => item.id === (product?.id || parseInt(id)));
+  const cartQuantity = cartItem ? cartItem.quantity : 0;
 
   // Ürün detaylarını, ilgili ürünleri ve yorumları çek
   useEffect(() => {
@@ -79,7 +84,6 @@ const ProductDetailsPage = ({ darkMode }) => {
     setIsFavoriteLoading(true);
     try {
       await toggleFavorite(parseInt(id));
-      
       // Header'ı güncelle
       fetchFavorites();
     } catch (error) {
@@ -91,7 +95,8 @@ const ProductDetailsPage = ({ darkMode }) => {
   };
 
   const handleQuantityChange = (value) => {
-    const newValue = Math.max(1, Math.min(99, quantity + value));
+    // Sepetteki miktar + seçili miktar toplamı stoktan fazla olamaz
+    const newValue = Math.max(1, Math.min(stock - cartQuantity, quantity + value));
     setQuantity(newValue);
   };
 
@@ -100,10 +105,17 @@ const ProductDetailsPage = ({ darkMode }) => {
       alert('Sepete eklemek için giriş yapmalısınız!');
       return;
     }
+    if (stock === 0) {
+      alert('Bu ürün stokta yok!');
+      return;
+    }
+    if (cartQuantity + quantity > stock) {
+      alert(`Stok yetersiz! Bu üründen maksimum ${stock} adet ekleyebilirsiniz.`);
+      return;
+    }
 
     try {
       const token = localStorage.getItem('token');
-      
       // Backend'e sepete ekle
       const response = await axios.post('https://localhost:7098/api/CartItem', {
         userId: userId,
@@ -126,13 +138,10 @@ const ProductDetailsPage = ({ darkMode }) => {
           quantity: quantity
         };
         addToCart(item);
-        
         // Header'ı güncelle
         fetchCartFromBackend();
-        
         // Başarı mesajı
         alert('Ürün sepete eklendi!');
-        
         // Sepet animasyonu için
         const cartButton = document.querySelector('.cart-notification');
         if (cartButton) {
@@ -278,7 +287,7 @@ const ProductDetailsPage = ({ darkMode }) => {
                 <span>{quantity}</span>
                 <button 
                   onClick={() => handleQuantityChange(1)}
-                  disabled={quantity >= 99}
+                  disabled={quantity >= (stock - cartQuantity)}
                 >
                   <FiPlus />
                 </button>
@@ -286,8 +295,9 @@ const ProductDetailsPage = ({ darkMode }) => {
               <button 
                 className="add-to-cart"
                 onClick={handleAddToCart}
+                disabled={stock === 0 || (cartQuantity + quantity > stock)}
               >
-                <FiShoppingCart /> Sepete Ekle
+                <FiShoppingCart /> {stock === 0 ? 'Stokta Yok' : 'Sepete Ekle'}
               </button>
               <button 
                 className={`wishlist-button ${isFavorited ? 'favorited' : ''} ${isFavoriteLoading ? 'loading' : ''}`}

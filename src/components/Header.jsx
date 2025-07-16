@@ -38,9 +38,9 @@ const Header = ({ darkMode, setDarkMode }) => {
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [authMode, setAuthMode] = useState('login');
   const navigate = useNavigate();
-  const { cartItems, fetchCartFromBackend } = useCart();
+  const { cartItems, fetchCartFromBackend, clearCart } = useCart();
   const { isLoggedIn, logout, userId } = useUser();
-  const { favoritesCount, fetchFavorites } = useFavorites();
+  const { favoritesCount, fetchFavorites, clearFavorites } = useFavorites();
 
   const openAuthModal = (mode) => {
     setAuthMode(mode);
@@ -55,6 +55,8 @@ const Header = ({ darkMode, setDarkMode }) => {
   const handleLogout = () => {
     logout();
     setShowDropdown(false);
+    clearCart();
+    clearFavorites();
     navigate('/');
   };
 

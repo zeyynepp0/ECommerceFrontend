@@ -80,6 +80,10 @@ export const FavoriteProvider = ({ children }) => {
     }
   };
 
+  const clearFavorites = () => {
+    setFavorites([]);
+  };
+
   useEffect(() => {
     fetchFavorites();
   }, [userId, token]);
@@ -90,7 +94,7 @@ export const FavoriteProvider = ({ children }) => {
 
     const interval = setInterval(() => {
       fetchFavorites();
-    }, 5000); // 5 saniye
+    }, 1000); // 5 saniye
 
     return () => clearInterval(interval);
   }, [userId, token]);
@@ -102,7 +106,8 @@ export const FavoriteProvider = ({ children }) => {
       addFavorite, 
       removeFavorite, 
       toggleFavorite,
-      favoritesCount: favorites.length 
+      favoritesCount: favorites.length,
+      clearFavorites
     }}>
       {children}
     </FavoriteContext.Provider>
