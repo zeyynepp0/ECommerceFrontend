@@ -1,16 +1,21 @@
 import React, { useEffect, useState } from 'react';
 import axios from 'axios';
-import { useUser } from '../components/UserContext';
+import { useSelector, useDispatch } from 'react-redux'; // Redux hook'ları
+import { fetchFavorites, removeFavorite } from '../store/favoriteSlice'; // Favori işlemleri
 import { useNavigate, useParams } from 'react-router-dom';
 import { useSearchParams } from 'react-router-dom';
 import '../css/ProfilePage.css';
 import { useFavorites } from '../components/FavoriteContext';
+import { Formik, Form, Field, ErrorMessage } from 'formik'; // Formik ile form yönetimi
+import * as Yup from 'yup'; // Yup ile validasyon
+import { apiGet, apiPost, apiPut, apiDelete } from '../utils/api'; // Ortak API fonksiyonları
 
 const ProfilePage = () => {
-  const { userId: contextUserId, isLoggedIn } = useUser();
+  // Kullanıcı bilgilerini Redux store'dan alıyoruz
+  const { userId, isLoggedIn } = useSelector(state => state.user);
   const { userId: routeUserId } = useParams();
   const navigate = useNavigate();
-  const userId = contextUserId || routeUserId;
+  const userIdFromContext = userId || routeUserId;
 
   const [user, setUser] = useState(null);
   const [addresses, setAddresses] = useState([]);
@@ -22,43 +27,39 @@ const ProfilePage = () => {
 const tabFromUrl = searchParams.get('tab');
 const [activeTab, setActiveTab] = useState(tabFromUrl || 'profile');
 
-  const { removeFavorite, favorites: contextFavorites } = useFavorites();
+  // Favori verilerini Redux store'dan alıyoruz
+  const { favorites: contextFavorites } = useSelector(state => state.favorite);
+  const dispatch = useDispatch();
   const [favoriteProducts, setFavoriteProducts] = useState([]);
 
 
   useEffect(() => {
     const token = localStorage.getItem('token');
-    if (!token || !userId) {
+    if (!token || !userIdFromContext) {
       navigate('/login');
       return;
-      
     }
-    
-
+    // Kullanıcı, adres, favori ve sipariş verilerini çekiyoruz
     const fetchData = async () => {
       try {
-        const headers = { Authorization: `Bearer ${token}` };
-        const [userRes, addressRes, favoriteRes, orderRes] = await Promise.all([
-          axios.get(`https://localhost:7098/api/User/${userId}`, { headers }),
-          axios.get(`https://localhost:7098/api/Address/user/${userId}`, { headers }),
-          axios.get(`https://localhost:7098/api/Favorite/user/${userId}`, { headers }),
-          axios.get(`https://localhost:7098/api/Order/user/${userId}`, { headers })
+        const [userRes, addressRes, orderRes] = await Promise.all([
+          apiGet(`https://localhost:7098/api/User/${userIdFromContext}`),
+          apiGet(`https://localhost:7098/api/Address/user/${userIdFromContext}`),
+          apiGet(`https://localhost:7098/api/Order/user/${userIdFromContext}`)
         ]);
-
-        setUser(userRes.data);
-        setAddresses(addressRes.data);
-        setFavorites(favoriteRes.data);
-        setOrders(orderRes.data);
+        setUser(userRes);
+        setAddresses(addressRes);
+        setOrders(orderRes);
         setLoading(false);
-        
+        // Favorileri Redux ile çek
+        dispatch(fetchFavorites());
       } catch (error) {
         console.error('Profil verileri alınamadı:', error);
         navigate('/login');
       }
     };
-
     fetchData();
-  }, [userId, navigate]);
+  }, [userIdFromContext, navigate, dispatch]);
 
   useEffect(() => {
   setActiveTab(tabFromUrl);
@@ -66,14 +67,14 @@ const [activeTab, setActiveTab] = useState(tabFromUrl || 'profile');
 
   useEffect(() => {
     const fetchFavoriteProducts = async () => {
-      if (!favorites || favorites.length === 0) {
+      if (!contextFavorites || contextFavorites.length === 0) {
         setFavoriteProducts([]);
         return;
       }
       try {
         const token = localStorage.getItem('token');
         const productDetails = await Promise.all(
-          favorites.map(async fav => {
+          contextFavorites.map(async fav => {
             const res = await axios.get(`https://localhost:7098/api/Product/${fav.productId}`, {
               headers: { Authorization: `Bearer ${token}` }
             });
@@ -86,7 +87,7 @@ const [activeTab, setActiveTab] = useState(tabFromUrl || 'profile');
       }
     };
     fetchFavoriteProducts();
-  }, [favorites]);
+  }, [contextFavorites]);
 
   const handleUserChange = (e) => {
     setUser({ ...user, [e.target.name]: e.target.value });
@@ -109,48 +110,34 @@ const [activeTab, setActiveTab] = useState(tabFromUrl || 'profile');
     setAddresses(updated);
   };
 
+  // Adres kaydetme fonksiyonu
   const saveAddress = async (address) => {
-    const token = localStorage.getItem('token');
-    const headers = {
-      Authorization: `Bearer ${token}`,
-      'Content-Type': 'application/json'
+    const sanitizedAddress = {
+      ...address,
+      id: address.id?.toString().startsWith('temp') ? 0 : parseInt(address.id),
+      userId: parseInt(address.userId),
     };
-
- const sanitizedAddress = {
-    ...address,
-    id: address.id?.toString().startsWith('temp') ? 0 : parseInt(address.id),
-    userId: parseInt(address.userId),
+    try {
+      if (address.id?.toString().startsWith('temp')) {
+        await apiPost(`https://localhost:7098/api/Address`, sanitizedAddress);
+      } else {
+        await apiPut(`https://localhost:7098/api/Address`, sanitizedAddress);
+      }
+      const refreshed = await apiGet(`https://localhost:7098/api/Address/user/${userIdFromContext}`);
+      setAddresses(refreshed);
+    } catch (err) {
+      alert('Adres kaydedilemedi. ' + err);
+    }
   };
 
-  try {
-    if (address.id?.toString().startsWith('temp')) {
-      await axios.post(`https://localhost:7098/api/Address`, sanitizedAddress, { headers });
-    } else {
-      await axios.put(`https://localhost:7098/api/Address`, sanitizedAddress, { headers });
-    }
-
-    const refreshed = await axios.get(`https://localhost:7098/api/Address/user/${userId}`, { headers });
-    setAddresses(refreshed.data);
-  } catch (err) {
-    console.error('Adres kaydetme hatası:', err);
-    alert('Adres kaydedilemedi.');
-  }
-};
-
+  // Adres silme fonksiyonu
   const deleteAddress = async (id) => {
-    const token = localStorage.getItem('token');
-    const headers = {
-      Authorization: `Bearer ${token}`
-    };
-
     try {
-      await axios.delete(`https://localhost:7098/api/Address/${id}`, { headers });
-
-      const refreshed = await axios.get(`https://localhost:7098/api/Address/user/${userId}`, { headers });
-      setAddresses(refreshed.data);
+      await apiDelete(`https://localhost:7098/api/Address/${id}`);
+      const refreshed = await apiGet(`https://localhost:7098/api/Address/user/${userIdFromContext}`);
+      setAddresses(refreshed);
     } catch (err) {
-      console.error('Adres silme hatası:', err);
-      alert('Adres silinemedi.');
+      alert('Adres silinemedi. ' + err);
     }
   };
 
@@ -168,10 +155,26 @@ const [activeTab, setActiveTab] = useState(tabFromUrl || 'profile');
         contactName: '',
         contactSurname: '',
         contactPhone: '',
-        userId,
+        userId: userIdFromContext,
       },
     ]);
   };
+
+  // Favorilerden çıkarma işlemi
+  const handleRemoveFavorite = (productId) => {
+    dispatch(removeFavorite(productId));
+  };
+
+  // Profil güncelleme için Yup validasyon şeması
+  const ProfileSchema = Yup.object().shape({
+    firstName: Yup.string().min(2, 'Adınız en az 2 karakter olmalı').required('Adınız gereklidir'),
+    lastName: Yup.string().min(2, 'Soyadınız en az 2 karakter olmalı').required('Soyadınız gereklidir'),
+    email: Yup.string().email('Geçerli bir e-posta giriniz').required('E-posta gereklidir'),
+    phone: Yup.string()
+      .matches(/^(\+90|0)?\d{10}$/,
+        'Telefon numarası geçersiz. Başında 0 veya +90 olmadan 10 haneli girin.')
+      .required('Telefon numarası gereklidir'),
+  });
 
   if (loading) return (
     <div className="loading-container">
@@ -235,53 +238,83 @@ const [activeTab, setActiveTab] = useState(tabFromUrl || 'profile');
           {activeTab === 'profile' && user && (
             <div className="profile-section card">
               <h2>Profil Bilgileri</h2>
-              <form className="profile-form">
-                <div className="form-group">
-                  <label>Ad</label>
-                  <input 
-                    name="firstName" 
-                    value={user.firstName} 
-                    onChange={handleUserChange} 
-                    className="form-input"
-                  />
-                </div>
-                <div className="form-group">
-                  <label>Soyad</label>
-                  <input 
-                    name="lastName" 
-                    value={user.lastName} 
-                    onChange={handleUserChange} 
-                    className="form-input"
-                  />
-                </div>
-                <div className="form-group">
-                  <label>Email</label>
-                  <input 
-                    name="email" 
-                    value={user.email} 
-                    onChange={handleUserChange} 
-                    className="form-input"
-                    type="email"
-                  />
-                </div>
-                <div className="form-group">
-                  <label>Telefon</label>
-                  <input 
-                    name="phone" 
-                    value={user.phone} 
-                    onChange={handleUserChange} 
-                    className="form-input"
-                    type="tel"
-                  />
-                </div>
-                <button 
-                  onClick={saveUser} 
-                  className="save-button primary"
-                  type="button"
-                >
-                  Bilgilerimi Güncelle
-                </button>
-              </form>
+              {/* Formik ile profil güncelleme formu */}
+              <Formik
+                enableReinitialize
+                initialValues={{
+                  firstName: user.firstName || '',
+                  lastName: user.lastName || '',
+                  email: user.email || '',
+                  phone: user.phone || ''
+                }}
+                validationSchema={ProfileSchema}
+                onSubmit={async (values, { setSubmitting }) => {
+                  try {
+                    await axios.put(`https://localhost:7098/api/User`, { ...user, ...values }, {
+                      headers: { Authorization: `Bearer ${localStorage.getItem('token')}` },
+                    });
+                    alert('Kullanıcı bilgileri güncellendi!');
+                  } catch (error) {
+                    alert('Güncelleme başarısız.');
+                  } finally {
+                    setSubmitting(false);
+                  }
+                }}
+              >
+                {({ isSubmitting, values, handleChange }) => (
+                  <Form className="profile-form">
+                    <div className="form-group">
+                      <label>Ad</label>
+                      <Field
+                        name="firstName"
+                        value={values.firstName}
+                        onChange={handleChange}
+                        className="form-input"
+                      />
+                      <ErrorMessage name="firstName" component="div" className="error-message" />
+                    </div>
+                    <div className="form-group">
+                      <label>Soyad</label>
+                      <Field
+                        name="lastName"
+                        value={values.lastName}
+                        onChange={handleChange}
+                        className="form-input"
+                      />
+                      <ErrorMessage name="lastName" component="div" className="error-message" />
+                    </div>
+                    <div className="form-group">
+                      <label>Email</label>
+                      <Field
+                        name="email"
+                        type="email"
+                        value={values.email}
+                        onChange={handleChange}
+                        className="form-input"
+                      />
+                      <ErrorMessage name="email" component="div" className="error-message" />
+                    </div>
+                    <div className="form-group">
+                      <label>Telefon</label>
+                      <Field
+                        name="phone"
+                        type="tel"
+                        value={values.phone}
+                        onChange={handleChange}
+                        className="form-input"
+                      />
+                      <ErrorMessage name="phone" component="div" className="error-message" />
+                    </div>
+                    <button
+                      type="submit"
+                      className="save-button primary"
+                      disabled={isSubmitting}
+                    >
+                      {isSubmitting ? 'Kaydediliyor...' : 'Bilgilerimi Güncelle'}
+                    </button>
+                  </Form>
+                )}
+              </Formik>
             </div>
           )}
 
@@ -431,7 +464,7 @@ const [activeTab, setActiveTab] = useState(tabFromUrl || 'profile');
                         <p className="stock">Stok: {product.stock}</p>
                         <p className="category">Kategori: {product.category?.name}</p>
                         <button 
-                          onClick={e => { e.stopPropagation(); removeFavorite(product.id); }}
+                          onClick={e => { e.stopPropagation(); handleRemoveFavorite(product.id); }}
                           className="remove-button"
                         >
                           <i className="icon-trash"></i> Favorilerden Kaldır

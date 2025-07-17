@@ -12,6 +12,7 @@ import axios from 'axios';
 import ProductCard from '../components/ProductCard';
 import '../css/ProductsPage.css';
 import { useCart } from '../components/CartContext';
+import { apiGet, parseApiError } from '../utils/api'; // Ortak API fonksiyonları
 
 const ProductsPage = ({ darkMode }) => {
   const [products, setProducts] = useState([]);
@@ -62,23 +63,23 @@ const ProductsPage = ({ darkMode }) => {
       try {
         // Backend'den ürün ve kategori verilerini aynı anda çek
         const [productsRes, categoriesRes] = await Promise.all([
-          axios.get('https://localhost:7098/api/Product'),
-          axios.get('https://localhost:7098/api/Category')
+          apiGet('https://localhost:7098/api/Product'),
+          apiGet('https://localhost:7098/api/Category')
         ]);
-
         // Cevaplardan gelen verileri state'lere yerleştir
-        setProducts(productsRes.data);
-        setFilteredProducts(productsRes.data);
-        setCategories(categoriesRes.data);
+        setProducts(productsRes);
+        setFilteredProducts(productsRes);
+        setCategories(categoriesRes);
       } catch (error) {
-        console.error('Veri çekme hatası:', error);
+        console.error('Veri çekme hatası:', parseApiError(error));
       } finally {
         setLoading(false);
       }
     };
-
     fetchData();
   }, []);
+
+  // Açıklama: Ürün ve kategori verileri artık ortak apiGet fonksiyonu ile çekilmektedir. Kodun her adımında Türkçe açıklamalar eklenmiştir.
 
   // Filtreleme fonksiyonu
   useEffect(() => {

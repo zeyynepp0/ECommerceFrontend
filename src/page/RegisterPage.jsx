@@ -14,77 +14,33 @@ import {
 import { FcGoogle } from 'react-icons/fc';
 import "../css/LoginSignup.css"; 
 import axios from 'axios';
-import { useUser } from '../components/UserContext';
+import { useSelector, useDispatch } from 'react-redux'; // Redux hook'ları
+import { login } from '../store/userSlice'; // Kullanıcı işlemleri
+import { Formik, Form, Field, ErrorMessage } from 'formik'; // Formik ile form yönetimi
+import * as Yup from 'yup'; // Yup ile validasyon
+import { apiPost, parseApiError } from '../utils/api'; // Ortak API fonksiyonları
+
+// Form için Yup validasyon şeması
+const RegisterSchema = Yup.object().shape({
+  firstName: Yup.string().min(2, 'Adınız en az 2 karakter olmalı').required('Adınız gereklidir'),
+  lastName: Yup.string().min(2, 'Soyadınız en az 2 karakter olmalı').required('Soyadınız gereklidir'),
+  email: Yup.string().email('Geçerli bir e-posta giriniz').required('E-posta gereklidir'),
+  password: Yup.string().min(6, 'Şifre en az 6 karakter olmalı').required('Şifre gereklidir'),
+  birthDate: Yup.date().max(new Date(), 'Doğum tarihi ileri bir tarih olamaz').required('Doğum tarihi gereklidir'),
+  phone: Yup.string()
+    .matches(/^(\+90|0)?\d{10}$/,
+      'Telefon numarası geçersiz. Başında 0 veya +90 olmadan 10 haneli girin.')
+    .required('Telefon numarası gereklidir'),
+});
 
 const RegisterPage = ({ darkMode }) => {
-  const [formData, setFormData] = useState({
-    firstName: '',
-    lastName: '',
-    email: '',
-    password: '',
-    birthDate: '',
-    phone: ''
-  });
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const [phoneError, setPhoneError] = useState('');
   const navigate = useNavigate();
-  const { login } = useUser();
+  const dispatch = useDispatch();
 
-  const handleChange = (e) => {
-    const { name, value } = e.target;
-    setFormData(prev => ({ ...prev, [name]: value }));
-    setError('');
-  };
-
-  const validatePhone = (phone) => {
-    const cleaned = phone.replace(/\D/g, '');
-    if (cleaned.length === 10) return true;
-    if (cleaned.length === 11 && cleaned.startsWith('0')) return true;
-    if (cleaned.length === 12 && cleaned.startsWith('90')) return true;
-    return false;
-  };
-
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    setIsLoading(true);
-    setError('');
-    setPhoneError('');
-
-    try {
-      if (!formData.phone) {
-        setPhoneError('Telefon numarası gereklidir');
-        setIsLoading(false);
-        return;
-      }
-      if (!validatePhone(formData.phone)) {
-        setPhoneError('Telefon numarası geçersiz. Lütfen başında 0 veya +90 olmadan 10 haneli girin.');
-        setIsLoading(false);
-        return;
-      }
-      // Backend'e kayıt isteği gönder
-      const payload = new FormData();
-      payload.append('FirstName', formData.firstName);
-      payload.append('LastName', formData.lastName);
-      payload.append('Email', formData.email);
-      payload.append('PasswordHash', formData.password); // Backend hash'leyecek
-      payload.append('BirthDate', formData.birthDate);
-      payload.append('Phone', formData.phone);
-      payload.append('Role', 'User');
-      const res = await axios.post('https://localhost:7098/api/User', payload);
-      navigate('/login');
-    } catch (err) {
-      if (err.response && err.response.data) {
-        setError(err.response.data);
-      } else {
-        setError('Bir hata oluştu');
-      }
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
+  // Google ile kayıt fonksiyonu (dummy)
   const handleGoogleLogin = () => {
     console.log('Google ile kayıt olunuyor');
   };
@@ -117,96 +73,128 @@ const RegisterPage = ({ darkMode }) => {
           <span>veya</span>
         </div>
 
-        <form onSubmit={handleSubmit}>
-          <div className="input-group">
-            <FiUser className="input-icon" />
-            <input
-              type="text"
-              name="firstName"
-              value={formData.firstName}
-              onChange={handleChange}
-              required
-            />
-            <label className={formData.firstName ? 'filled' : ''}>Adınız</label>
-          </div>
+        {/* Formik ile form yönetimi */}
+        <Formik
+          initialValues={{
+            firstName: '',
+            lastName: '',
+            email: '',
+            password: '',
+            birthDate: '',
+            phone: ''
+          }}
+          validationSchema={RegisterSchema}
+          onSubmit={async (values, { setSubmitting }) => {
+            setIsLoading(true);
+            setError('');
+            try {
+              // Ortak API fonksiyonu ile backend'e kayıt isteği gönder
+              const payload = new FormData();
+              payload.append('FirstName', values.firstName);
+              payload.append('LastName', values.lastName);
+              payload.append('Email', values.email);
+              payload.append('PasswordHash', values.password); // Backend hash'leyecek
+              payload.append('BirthDate', values.birthDate);
+              payload.append('Phone', values.phone);
+              payload.append('Role', 'User');
+              const response = await apiPost('https://localhost:7098/api/User', payload);
+              // Başarılı kayıtta Redux ile kullanıcıyı güncelle
+              dispatch(login({ userId: response.userId, token: response.token }));
+              navigate('/login');
+            } catch (error) {
+              setError(parseApiError(error));
+            } finally {
+              setIsLoading(false);
+              setSubmitting(false);
+            }
+          }}
+        >
+          {({ isSubmitting }) => (
+            <Form>
+              <div className="input-group">
+                <FiUser className="input-icon" />
+                <Field
+                  type="text"
+                  name="firstName"
+                  required
+                />
+                <label>Adınız</label>
+                <ErrorMessage name="firstName" component="div" className="error-message" />
+              </div>
 
-          <div className="input-group">
-            <FiUser className="input-icon" />
-            <input
-              type="text"
-              name="lastName"
-              value={formData.lastName}
-              onChange={handleChange}
-              required
-            />
-            <label className={formData.lastName ? 'filled' : ''}>Soyadınız</label>
-          </div>
+              <div className="input-group">
+                <FiUser className="input-icon" />
+                <Field
+                  type="text"
+                  name="lastName"
+                  required
+                />
+                <label>Soyadınız</label>
+                <ErrorMessage name="lastName" component="div" className="error-message" />
+              </div>
 
-          <div className="input-group">
-            <FiMail className="input-icon" />
-            <input
-              type="email"
-              name="email"
-              value={formData.email}
-              onChange={handleChange}
-              required
-            />
-            <label className={formData.email ? 'filled' : ''}>E-posta</label>
-          </div>
+              <div className="input-group">
+                <FiMail className="input-icon" />
+                <Field
+                  type="email"
+                  name="email"
+                  required
+                />
+                <label>E-posta</label>
+                <ErrorMessage name="email" component="div" className="error-message" />
+              </div>
 
-          <div className="input-group">
-            <FiLock className="input-icon" />
-            <input
-              type={showPassword ? 'text' : 'password'}
-              name="password"
-              value={formData.password}
-              onChange={handleChange}
-              required
-            />
-            <label className={formData.password ? 'filled' : ''}>Şifre</label>
-            <button
-              type="button"
-              className="password-toggle"
-              onClick={() => setShowPassword(!showPassword)}
-            >
-              {showPassword ? <FiEyeOff /> : <FiEye />}
-            </button>
-          </div>
+              <div className="input-group">
+                <FiLock className="input-icon" />
+                <Field
+                  type={showPassword ? 'text' : 'password'}
+                  name="password"
+                  required
+                />
+                <label>Şifre</label>
+                <button
+                  type="button"
+                  className="password-toggle"
+                  onClick={() => setShowPassword(!showPassword)}
+                >
+                  {showPassword ? <FiEyeOff /> : <FiEye />}
+                </button>
+                <ErrorMessage name="password" component="div" className="error-message" />
+              </div>
 
-          <div className="input-group">
-            <FiCalendar className="input-icon" />
-            <input
-              type="date"
-              name="birthDate"
-              value={formData.birthDate}
-              onChange={handleChange}
-              required
-              max={today}
-            />
-            <label className={formData.birthDate ? 'filled' : ''}>Doğum Tarihi</label>
-          </div>
+              <div className="input-group">
+                <FiCalendar className="input-icon" />
+                <Field
+                  type="date"
+                  name="birthDate"
+                  required
+                  max={today}
+                />
+                <label>Doğum Tarihi</label>
+                <ErrorMessage name="birthDate" component="div" className="error-message" />
+              </div>
 
-          <div className="input-group">
-            <FiPhoneCall className="input-icon" />
-            <input
-              type="tel"
-              name="phone"
-              value={formData.phone}
-              onChange={handleChange}
-              required
-            />
-            <label className={formData.phone ? 'filled' : ''}>Telefon</label>
-            {phoneError && <div className="error-message">{phoneError}</div>}
-          </div>
+              <div className="input-group">
+                <FiPhoneCall className="input-icon" />
+                <Field
+                  type="tel"
+                  name="phone"
+                  required
+                />
+                <label>Telefon</label>
+                <ErrorMessage name="phone" component="div" className="error-message" />
+              </div>
 
-          <button 
-            type="submit" 
-            className="submit-btn"
-            disabled={isLoading}
-          >
-            {isLoading ? 'Yükleniyor...' : 'Kayıt Ol'}
-          </button>
-        </form>
+              <button 
+                type="submit" 
+                className="submit-btn"
+                disabled={isLoading || isSubmitting}
+              >
+                {isLoading ? 'Yükleniyor...' : 'Kayıt Ol'}
+              </button>
+            </Form>
+          )}
+        </Formik>
 
         <div className="auth-footer">
           Zaten hesabınız var mı?
@@ -220,3 +208,4 @@ const RegisterPage = ({ darkMode }) => {
 };
 
 export default RegisterPage;
+// Açıklama: Kayıt işlemi artık ortak apiPost fonksiyonu ile yapılmaktadır. Kodun her adımında Türkçe açıklamalar eklenmiştir.

@@ -1,10 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { useUser } from '../components/UserContext';
+import { useSelector } from 'react-redux'; // Redux hook'u
 import { useNavigate } from 'react-router-dom';
 import '../css/CheckoutPage.css';
+import { apiGet, apiPost, apiDelete, parseApiError } from '../utils/api'; // Ortak API fonksiyonları
 
 const CheckoutPage = () => {
-  const { user } = useUser();
+  // Kullanıcı bilgilerini Redux store'dan alıyoruz
+  const { userId } = useSelector(state => state.user);
   const navigate = useNavigate();
   const [step, setStep] = useState(1);
   const [cartItems, setCartItems] = useState([]);
@@ -44,81 +46,70 @@ const CheckoutPage = () => {
     { id: 'debit', name: 'Banka Kartı' }
   ];
 
+  // Sepet ve adres verilerini çekme
   useEffect(() => {
-    if (!user) {
+    if (!userId) {
       navigate('/login');
       return;
     }
     fetchCartItems();
     fetchAddresses();
-  }, [user]);
+  }, [userId]);
 
+  // Sepet verilerini backend'den çek
   const fetchCartItems = async () => {
     try {
-      const response = await fetch(`https://localhost:7098/api/CartItem/user/${user.id}`);
-      if (response.ok) {
-        const data = await response.json();
-        setCartItems(data);
-        const total = data.reduce((sum, item) => sum + (item.product.price * item.quantity), 0);
-        setCartTotal(total);
-      }
+      const data = await apiGet(`https://localhost:7098/api/CartItem/user/${userId}`);
+      setCartItems(data);
+      const total = data.reduce((sum, item) => sum + (item.product.price * item.quantity), 0);
+      setCartTotal(total);
     } catch (error) {
-      console.error('Sepet yüklenirken hata:', error);
+      console.error('Sepet yüklenirken hata:', parseApiError(error));
     }
   };
 
+  // Adres verilerini backend'den çek
   const fetchAddresses = async () => {
     try {
-      const response = await fetch(`https://localhost:7098/api/Address/user/${user.id}`);
-      if (response.ok) {
-        const data = await response.json();
-        setAddresses(data);
-      }
+      const data = await apiGet(`https://localhost:7098/api/Address/user/${userId}`);
+      setAddresses(data);
     } catch (error) {
-      console.error('Adresler yüklenirken hata:', error);
+      console.error('Adresler yüklenirken hata:', parseApiError(error));
     }
   };
 
+  // Yeni adres ekleme fonksiyonu
   const handleAddNewAddress = async () => {
     try {
-      const response = await fetch('https://localhost:7098/api/Address', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          ...newAddress,
-          userId: user.id
-        })
+      await apiPost('https://localhost:7098/api/Address', {
+        ...newAddress,
+        userId: userId
       });
-
-      if (response.ok) {
-        await fetchAddresses();
-        setShowNewAddressForm(false);
-        setNewAddress({
-          title: '',
-          contactName: '',
-          contactSurname: '',
-          contactPhone: '',
-          city: '',
-          district: '',
-          fullAddress: ''
-        });
-      }
+      await fetchAddresses();
+      setShowNewAddressForm(false);
+      setNewAddress({
+        title: '',
+        contactName: '',
+        contactSurname: '',
+        contactPhone: '',
+        city: '',
+        district: '',
+        fullAddress: ''
+      });
     } catch (error) {
-      console.error('Adres eklenirken hata:', error);
+      console.error('Adres eklenirken hata:', parseApiError(error));
     }
   };
 
+  // Sipariş oluşturma fonksiyonu
   const handleCreateOrder = async () => {
     if (!selectedAddress || !shippingCompany || !paymentMethod) {
       alert('Lütfen tüm alanları doldurun!');
       return;
     }
-
     try {
       const orderData = {
-        userId: user.id,
+        userId: userId,
         addressId: selectedAddress.id,
         shippingCompany: shippingCompany,
         paymentMethod: paymentMethod,
@@ -129,50 +120,26 @@ const CheckoutPage = () => {
           unitPrice: item.product.price
         }))
       };
-
-      const response = await fetch('https://localhost:7098/api/Order', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(orderData)
-      });
-
-      if (response.ok) {
-        const result = await response.json();
-        setOrderId(result.orderId);
-        setStep(4); // Ödeme adımına geç
-      }
+      const result = await apiPost('https://localhost:7098/api/Order', orderData);
+      setOrderId(result.orderId);
+      setStep(4); // Ödeme adımına geç
     } catch (error) {
-      console.error('Sipariş oluşturulurken hata:', error);
+      console.error('Sipariş oluşturulurken hata:', parseApiError(error));
     }
   };
 
+  // Ödeme işlemi fonksiyonu
   const handlePayment = async () => {
     if (!orderId) return;
-
     try {
-      const paymentResponse = await fetch('https://localhost:7098/api/Order/payment', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          ...paymentData,
-          orderId: orderId
-        })
+      await apiPost('https://localhost:7098/api/Order/payment', {
+        ...paymentData,
+        orderId: orderId
       });
-
-      if (paymentResponse.ok) {
-        alert('Ödeme başarıyla alındı! Siparişiniz onaylandı.');
-        navigate('/profile');
-      } else {
-        const error = await paymentResponse.json();
-        alert(error.message || 'Ödeme işlemi başarısız!');
-      }
+      alert('Ödeme başarıyla alındı! Siparişiniz onaylandı.');
+      navigate('/profile');
     } catch (error) {
-      console.error('Ödeme işlemi sırasında hata:', error);
-      alert('Ödeme işlemi sırasında hata oluştu!');
+      alert(parseApiError(error) || 'Ödeme işlemi sırasında hata oluştu!');
     }
   };
 

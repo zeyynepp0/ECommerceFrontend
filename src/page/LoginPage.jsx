@@ -4,72 +4,27 @@ import { FiEye, FiEyeOff, FiMail, FiLock, FiLogIn } from 'react-icons/fi';
 import { FcGoogle } from 'react-icons/fc';
 import "../css/LoginSignup.css";
 import axios from 'axios';
-import { useUser } from '../components/UserContext';
+import { useSelector, useDispatch } from 'react-redux'; // Redux hook'ları
+import { login } from '../store/userSlice'; // Kullanıcı işlemleri
 import { jwtDecode } from 'jwt-decode';
+import { Formik, Form, Field, ErrorMessage } from 'formik'; // Formik ile form yönetimi
+import * as Yup from 'yup'; // Yup ile validasyon
+import { apiPost, parseApiError } from '../utils/api'; // Ortak API fonksiyonları
 
+// Form için Yup validasyon şeması
+const LoginSchema = Yup.object().shape({
+  email: Yup.string().email('Geçerli bir e-posta giriniz').required('E-posta gereklidir'),
+  password: Yup.string().min(6, 'Şifre en az 6 karakter olmalı').required('Şifre gereklidir'),
+});
 
 const LoginPage = ({ darkMode }) => {
-  const [formData, setFormData] = useState({ email: '', password: '' });
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const navigate = useNavigate();
-  const { login } = useUser();
+  const dispatch = useDispatch();
 
-  const handleChange = (e) => {
-    const { name, value } = e.target;
-    setFormData(prev => ({ ...prev, [name]: value }));
-    setError('');
-  };
-
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    setIsLoading(true);
-    setError('');
-
-    try {
-      const payload = new FormData();
-      payload.append('Email', formData.email);
-      payload.append('Password', formData.password);
-
-      const res = await axios.post('https://localhost:7098/api/User/login', payload);
-      const token = res.data.token;
-
-      localStorage.setItem('isLoggedIn', 'true');
-      localStorage.setItem('token', token);
-
-      // JWT'den userId'yi decode et
-      const decoded = jwtDecode(token);
-      const userId =
-        decoded['http://schemas.xmlsoap.org/ws/2005/05/identity/claims/nameidentifier'] ||
-        decoded.nameid || decoded.sub || decoded.id || decoded.userId;
-
-      if (!userId) {
-        setError('Kullanıcı ID alınamadı. Lütfen tekrar deneyin.');
-        setIsLoading(false);
-        return;
-      }
-
-      localStorage.setItem('userId', userId);
-      login(userId, token);
-      navigate(`/profile/${userId}`);
-    } catch (err) {
-      const data = err?.response?.data;
-      if (typeof data === 'string') {
-        setError(data);
-      } else if (data?.errors) {
-        const messages = Object.values(data.errors).flat().join(' ');
-        setError(messages);
-      } else if (data?.title) {
-        setError(data.title);
-      } else {
-        setError('Bir hata oluştu. Lütfen tekrar deneyin.');
-      }
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
+  // Google ile giriş fonksiyonu (dummy)
   const handleGoogleLogin = () => {
     console.log('Google ile giriş yapılıyor');
     // Google auth işlemi buraya entegre edilebilir
@@ -95,46 +50,88 @@ const LoginPage = ({ darkMode }) => {
 
         <div className="divider"><span>veya</span></div>
 
-        <form onSubmit={handleSubmit}>
-          <div className="input-group">
-            <FiMail className="input-icon" />
-            <input
-              type="email"
-              name="email"
-              value={formData.email}
-              onChange={handleChange}
-              required
-            />
-            <label className={formData.email ? 'filled' : ''}>E-posta</label>
-          </div>
+        {/* Formik ile form yönetimi */}
+        <Formik
+          initialValues={{ email: '', password: '' }}
+          validationSchema={LoginSchema}
+          onSubmit={async (values, { setSubmitting }) => {
+            setIsLoading(true);
+            setError('');
+            try {
+              // Ortak API fonksiyonu ile backend'e login isteği gönder
+              const payload = new FormData();
+              payload.append('Email', values.email);
+              payload.append('Password', values.password);
+              const response = await apiPost('https://localhost:7098/api/User/login', payload);
+              const token = response.token;
+              localStorage.setItem('isLoggedIn', 'true');
+              localStorage.setItem('token', token);
+              // JWT'den userId'yi decode et
+              const decoded = jwtDecode(token);
+              const userId =
+                decoded['http://schemas.xmlsoap.org/ws/2005/05/identity/claims/nameidentifier'] ||
+                decoded.nameid || decoded.sub || decoded.id || decoded.userId;
+              if (!userId) {
+                setError('Kullanıcı ID alınamadı. Lütfen tekrar deneyin.');
+                setIsLoading(false);
+                setSubmitting(false);
+                return;
+              }
+              localStorage.setItem('userId', userId);
+              // Başarılı girişte Redux ile kullanıcıyı güncelle
+              dispatch(login({ userId: userId, token: token }));
+              navigate(`/profile/${userId}`);
+            } catch (error) {
+              setError(parseApiError(error));
+            } finally {
+              setIsLoading(false);
+              setSubmitting(false);
+            }
+          }}
+        >
+          {({ isSubmitting }) => (
+            <Form>
+              <div className="input-group">
+                <FiMail className="input-icon" />
+                <Field
+                  type="email"
+                  name="email"
+                  autoComplete="username"
+                  required
+                />
+                <label>E-posta</label>
+                <ErrorMessage name="email" component="div" className="error-message" />
+              </div>
 
-          <div className="input-group">
-            <FiLock className="input-icon" />
-            <input
-              type={showPassword ? 'text' : 'password'}
-              name="password"
-              value={formData.password}
-              onChange={handleChange}
-              required
-            />
-            <label className={formData.password ? 'filled' : ''}>Şifre</label>
-            <button
-              type="button"
-              className="password-toggle"
-              onClick={() => setShowPassword(!showPassword)}
-            >
-              {showPassword ? <FiEyeOff /> : <FiEye />}
-            </button>
-          </div>
+              <div className="input-group">
+                <FiLock className="input-icon" />
+                <Field
+                  type={showPassword ? 'text' : 'password'}
+                  name="password"
+                  autoComplete="current-password"
+                  required
+                />
+                <label>Şifre</label>
+                <button
+                  type="button"
+                  className="password-toggle"
+                  onClick={() => setShowPassword(!showPassword)}
+                >
+                  {showPassword ? <FiEyeOff /> : <FiEye />}
+                </button>
+                <ErrorMessage name="password" component="div" className="error-message" />
+              </div>
 
-          <button
-            type="submit"
-            className="submit-btn"
-            disabled={isLoading}
-          >
-            {isLoading ? 'Yükleniyor...' : 'Giriş Yap'}
-          </button>
-        </form>
+              <button
+                type="submit"
+                className="submit-btn"
+                disabled={isLoading || isSubmitting}
+              >
+                {isLoading ? 'Yükleniyor...' : 'Giriş Yap'}
+              </button>
+            </Form>
+          )}
+        </Formik>
 
         <div className="auth-footer">
           Hesabınız yok mu?
@@ -146,3 +143,4 @@ const LoginPage = ({ darkMode }) => {
 };
 
 export default LoginPage;
+// Açıklama: Login işlemi artık ortak apiPost fonksiyonu ile yapılmaktadır. Kodun her adımında Türkçe açıklamalar eklenmiştir.

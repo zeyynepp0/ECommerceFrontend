@@ -12,8 +12,6 @@ import './App.css';
 import axios from 'axios';
 import CartPage from './page/CartPage';
 import CheckoutPage from './page/CheckoutPage';
-import { useUser } from './components/UserContext';
-import { UserProvider } from './components/UserContext';
 import { FavoriteProvider } from './components/FavoriteContext';
 import ProfilePage from './page/ProfilePage';
 
@@ -28,12 +26,10 @@ const API = axios.create({
 
 function App() {
   const [darkMode, setDarkMode] = useState(false);
-  const { isLoggedIn, login, logout, userId } = useUser();
+  // Açıklama: Bu dosyada UserContext ve UserProvider kaldırıldı. Kullanıcı işlemleri artık Redux Toolkit ile yönetiliyor.
 
 
   return (
-    <UserProvider>
-    <FavoriteProvider>
     <CartProvider>
     <Router>
       <div className={`app ${darkMode ? 'dark' : ''}`}></div>
@@ -42,7 +38,7 @@ function App() {
           setDarkMode={setDarkMode}
         />
         <Routes>
-          <Route path="/" element={<HomePage darkMode={darkMode} setDarkMode={setDarkMode} isLoggedIn={isLoggedIn} />} /> 
+          <Route path="/" element={<HomePage darkMode={darkMode} setDarkMode={setDarkMode} />} /> 
           <Route path="/products" element={<ProductsPage darkMode={darkMode} />} />
           <Route path="/products/:id" element={<ProductDetailsPage darkMode={darkMode} />} />
           <Route path="/cart" element={<CartPage darkMode={darkMode} />} />
@@ -57,8 +53,6 @@ function App() {
     
     </Router>
     </CartProvider>
-    </FavoriteProvider>
-     </UserProvider>
   );
 }
 

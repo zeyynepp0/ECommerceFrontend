@@ -1,16 +1,21 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { FiHeart, FiShoppingCart, FiStar } from 'react-icons/fi';
 import axios from 'axios';
-import { useUser } from './UserContext';
-import { useCart } from './CartContext';
-import { useFavorites } from './FavoriteContext';
+import { useSelector, useDispatch } from 'react-redux'; // Redux hook'ları
+import { addToCart, fetchCartFromBackend } from '../store/cartSlice'; // Sepet işlemleri
+import { fetchFavorites, addFavorite, removeFavorite } from '../store/favoriteSlice'; // Favori işlemleri
+import { apiPost } from '../utils/api'; // Ortak API fonksiyonları
 import '../css/ProductCard.css';
 
 const ProductCard = ({ product, darkMode, onFavoriteChange }) => {
-  const { userId, isLoggedIn } = useUser();
-  const { addToCart, fetchCartFromBackend, cartItems } = useCart();
-  const { favorites, toggleFavorite, fetchFavorites } = useFavorites();
+  // Kullanıcı bilgilerini Redux store'dan alıyoruz
+  const { userId, isLoggedIn } = useSelector(state => state.user);
+  // Sepet verilerini Redux store'dan alıyoruz
+  const { cartItems } = useSelector(state => state.cart);
+  const dispatch = useDispatch();
+  // Favori verilerini Redux store'dan alıyoruz
+  const { favorites } = useSelector(state => state.favorite);
   const [isLoading, setIsLoading] = useState(false);
   const [isAddingToCart, setIsAddingToCart] = useState(false);
 
@@ -23,47 +28,47 @@ const ProductCard = ({ product, darkMode, onFavoriteChange }) => {
     ? Math.round((1 - price / discount) * 100)
     : null;
 
-  // Check if product is favorited
+  // Ürün favori mi?
   const isFavorited = favorites.some(fav => fav.productId === product.id);
 
   // Sepetteki mevcut miktarı bul
   const cartItem = cartItems.find(item => item.id === product.id);
   const cartQuantity = cartItem ? cartItem.quantity : 0;
 
+  // Favori butonuna tıklanınca
   const handleFavoriteClick = async (e) => {
     e.preventDefault();
     e.stopPropagation();
-
     if (!isLoggedIn) {
       alert('Favorilere eklemek için giriş yapmalısınız!');
       return;
     }
-
     setIsLoading(true);
     try {
-      await toggleFavorite(product.id);
-      // Header'ı güncelle
-      fetchFavorites();
+      if (isFavorited) {
+        await dispatch(removeFavorite(product.id));
+      } else {
+        await dispatch(addFavorite(product.id));
+      }
+      await dispatch(fetchFavorites());
       if (onFavoriteChange) {
         onFavoriteChange();
       }
     } catch (error) {
-      console.error('Favori işlemi başarısız:', error.response?.data || error.message);
       alert('Favori işlemi başarısız oldu!');
     } finally {
       setIsLoading(false);
     }
   };
 
+  // Sepete ekle butonuna tıklandığında çalışır
   const handleAddToCart = async (e) => {
     e.preventDefault();
     e.stopPropagation();
-    
     if (!isLoggedIn) {
       alert('Sepete eklemek için giriş yapmalısınız!');
       return;
     }
-
     // Stok kontrolü
     if (stock === 0) {
       alert('Bu ürün stokta yok!');
@@ -73,44 +78,27 @@ const ProductCard = ({ product, darkMode, onFavoriteChange }) => {
       alert(`Stok yetersiz! Bu üründen maksimum ${stock} adet ekleyebilirsiniz.`);
       return;
     }
-
     setIsAddingToCart(true);
     try {
-      const token = localStorage.getItem('token');
-      // Backend'e sepete ekle
-      const response = await axios.post('https://localhost:7098/api/CartItem', {
+      // Ortak API fonksiyonu ile backend'e sepete ekle
+      await apiPost('https://localhost:7098/api/CartItem', {
         userId: userId,
         productId: product.id,
         quantity: 1
-      }, {
-        headers: { 
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        }
       });
-
-      if (response.status === 200) {
-        // Frontend CartContext'e de ekle
-        const cartItem = {
-          id: product.id,
-          name: product.name,
-          price: product.price || 0,
-          image: product.imageUrl,
-          quantity: 1
-        };
-        addToCart(cartItem);
-        // Header'ı güncelle
-        fetchCartFromBackend();
-        // Başarı mesajı
-        alert('Ürün sepete eklendi!');
-      }
+      // Redux ile frontend sepetine ekle
+      dispatch(addToCart({
+        id: product.id,
+        name: product.name,
+        price: product.price || 0,
+        image: product.imageUrl,
+        quantity: 1
+      }));
+      // Sepeti backend'den güncelle
+      dispatch(fetchCartFromBackend(userId));
+      alert('Ürün sepete eklendi!');
     } catch (error) {
-      console.error('Sepete ekleme hatası:', error);
-      if (error.response) {
-        console.error('Response data:', error.response.data);
-        console.error('Response status:', error.response.status);
-      }
-      alert('Sepete ekleme başarısız oldu!');
+      alert('Sepete ekleme başarısız oldu! ' + error);
     } finally {
       setIsAddingToCart(false);
     }
@@ -121,7 +109,6 @@ const ProductCard = ({ product, darkMode, onFavoriteChange }) => {
       {hasValidDiscount && (
         <div className="product-badge">%{discountPercent}</div>
       )}
-
       <button 
         className={`wishlist-button ${isFavorited ? 'favorited' : ''} ${isLoading ? 'loading' : ''}`}
         onClick={handleFavoriteClick}
@@ -129,7 +116,6 @@ const ProductCard = ({ product, darkMode, onFavoriteChange }) => {
       >
         <FiHeart size={18} fill={isFavorited ? '#e74c3c' : 'none'} />
       </button>
-
       <Link to={`/products/${product.id}`} className="product-image">
         <img 
           src={product.imageUrl || product.image || '/images/default-product.jpg'} 
@@ -139,14 +125,11 @@ const ProductCard = ({ product, darkMode, onFavoriteChange }) => {
           }}
         />
       </Link>
-
       <div className="product-info">
         <span className="product-category">{product.category?.name || "Kategori Yok"}</span>
-
         <h3 className="product-title">
           <Link to={`/products/${product.id}`}>{product.name || "Ürün İsmi Yok"}</Link>
         </h3>
-
         <div className="product-rating">
           {[...Array(5)].map((_, i) => (
             <FiStar 
@@ -157,21 +140,18 @@ const ProductCard = ({ product, darkMode, onFavoriteChange }) => {
           ))}
           <span>({product.rating ?? 0})</span>
         </div>
-
         <div className="product-pricing">
           {price !== null ? (
             <p>{price.toFixed(2)} ₺</p>
           ) : (
             <p>Fiyat bilgisi yok</p>
           )}
-
           {hasValidDiscount && (
             <span className="product-discount">
               {discount.toFixed(2)}₺
             </span>
           )}
         </div>
-
         <button 
           className={`add-to-cart ${isAddingToCart ? 'loading' : ''}`}
           onClick={handleAddToCart}
@@ -186,3 +166,5 @@ const ProductCard = ({ product, darkMode, onFavoriteChange }) => {
 };
 
 export default ProductCard;
+// Açıklama: Bu component, favori işlemlerini Redux Toolkit ile yönetir. Favori ekleme ve çıkarma işlemleri Redux store üzerinden yapılır. Kodun her adımında Türkçe açıklamalar eklenmiştir.
+// Açıklama: Sepete ekleme işlemi artık ortak apiPost fonksiyonu ile yapılmaktadır. Kodun her adımında Türkçe açıklamalar eklenmiştir.

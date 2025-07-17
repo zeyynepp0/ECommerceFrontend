@@ -5,12 +5,14 @@ import ProductCard from '../components/ProductCard';
 import Header from '../components/Header';
 import Footer from '../components/Footer';
 import '../css/HomePage.css';
-import { useUser } from '../components/UserContext';
+import { useSelector } from 'react-redux'; // Redux hook'u
 import { useCart } from '../components/CartContext';
 import axios from 'axios';
+import { apiGet, parseApiError } from '../utils/api'; // Ortak API fonksiyonları
 
 const HomePage = ({ darkMode, setDarkMode }) => {
-  const { isLoggedIn, userId } = useUser();
+  // Kullanıcı bilgilerini Redux store'dan alıyoruz
+  const { isLoggedIn, userId } = useSelector(state => state.user);
   const [products, setProducts] = useState([]);
   const [categories, setCategories] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -19,24 +21,21 @@ const HomePage = ({ darkMode, setDarkMode }) => {
 
   useEffect(() => {
     setLoading(true);
-
     const fetchData = async () => {
       try {
         // Ürünleri ve kategorileri aynı anda çek
         const [productsRes, categoriesRes] = await Promise.all([
-          axios.get('https://localhost:7098/api/Product'),
-          axios.get('https://localhost:7098/api/Category')
+          apiGet('https://localhost:7098/api/Product'),
+          apiGet('https://localhost:7098/api/Category')
         ]);
-
-        setProducts(productsRes.data);
-        setCategories(categoriesRes.data);
+        setProducts(productsRes);
+        setCategories(categoriesRes);
         setLoading(false);
       } catch (error) {
-        console.error('Veri çekme hatası:', error);
+        console.error('Veri çekme hatası:', parseApiError(error));
         setLoading(false);
       }
     };
-
     fetchData();
   }, []);
 

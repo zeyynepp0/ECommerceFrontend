@@ -23,9 +23,10 @@ import {
 import { AiOutlineProduct } from "react-icons/ai";
 import '../css/Header.css';
 import Modal from 'react-modal';
-import { useCart } from './CartContext';
-import { useUser } from './UserContext';
-import { useFavorites } from './FavoriteContext';
+import { useSelector, useDispatch } from 'react-redux'; // Redux hook'ları
+import { fetchCartFromBackend, clearCart } from '../store/cartSlice'; // Sepet işlemleri
+import { fetchFavorites, clearFavorites, selectFavoritesCount } from '../store/favoriteSlice'; // Favori işlemleri
+import { logout } from '../store/userSlice'; // Kullanıcı çıkışı için action import edildi
 import axios from 'axios';
 
 Modal.setAppElement('#root');
@@ -38,9 +39,13 @@ const Header = ({ darkMode, setDarkMode }) => {
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [authMode, setAuthMode] = useState('login');
   const navigate = useNavigate();
-  const { cartItems, fetchCartFromBackend, clearCart } = useCart();
-  const { isLoggedIn, logout, userId } = useUser();
-  const { favoritesCount, fetchFavorites, clearFavorites } = useFavorites();
+  // Sepet verilerini Redux store'dan alıyoruz
+  const { cartItems } = useSelector(state => state.cart);
+  const dispatch = useDispatch();
+  // Kullanıcı bilgilerini Redux store'dan alıyoruz
+  const { isLoggedIn, userId } = useSelector(state => state.user);
+  // Favori verilerini Redux store'dan alıyoruz
+  const favoritesCount = useSelector(selectFavoritesCount);
 
   const openAuthModal = (mode) => {
     setAuthMode(mode);
@@ -52,11 +57,12 @@ const Header = ({ darkMode, setDarkMode }) => {
     setShowAuthModal(false);
   };
 
+  // Çıkış işlemi
   const handleLogout = () => {
-    logout();
-    setShowDropdown(false);
-    clearCart();
-    clearFavorites();
+    dispatch(logout()); // Kullanıcıyı Redux'tan çıkış yaptır
+    dispatch(clearCart()); // Sepeti temizle
+    dispatch(clearFavorites()); // Favorileri temizle
+    setShowDropdown(false); // Dropdown menüyü kapat
     navigate('/');
   };
 
@@ -71,16 +77,16 @@ const Header = ({ darkMode, setDarkMode }) => {
   // Sayfa değiştiğinde header'ı güncelle
   useEffect(() => {
     if (isLoggedIn && userId) {
-      fetchCartFromBackend();
-      fetchFavorites();
+      dispatch(fetchCartFromBackend(userId)); // Redux ile sepeti güncelle
+      dispatch(fetchFavorites()); // Redux ile favorileri güncelle
     }
-  }, [isLoggedIn, userId, fetchCartFromBackend, fetchFavorites]);
+  }, [isLoggedIn, userId, dispatch]);
 
   // Manuel yenileme fonksiyonu
   const refreshHeader = () => {
     if (isLoggedIn && userId) {
-      fetchCartFromBackend();
-      fetchFavorites();
+      dispatch(fetchCartFromBackend(userId)); // Redux ile sepeti güncelle
+      dispatch(fetchFavorites()); // Redux ile favorileri güncelle
     }
   };
 

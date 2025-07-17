@@ -1,169 +1,82 @@
-import React, { useState, useEffect } from 'react';
-import { useCart } from '../components/CartContext';
-import { useUser } from '../components/UserContext';
+import React, { useEffect } from 'react';
+import { useSelector, useDispatch } from 'react-redux'; // Redux hook'ları
+import { fetchCartFromBackend, addToCart, removeFromCart, updateQuantity, clearCart, selectCartTotal } from '../store/cartSlice';
+import { useSelector as useUserSelector } from 'react-redux';
 import { Link, useNavigate } from 'react-router-dom';
 import '../css/CartPage.css';
+import { apiDelete, apiPost, parseApiError } from '../utils/api'; // Ortak API fonksiyonları
 
 const CartPage = ({ darkMode }) => {
-  const { isLoggedIn, userId } = useUser();
-  const { fetchCartFromBackend } = useCart();
+  // Redux store'dan kullanıcı bilgilerini alıyoruz
+  const { userId, isLoggedIn } = useSelector(state => state.user);
+  // Redux store'dan sepet verilerini alıyoruz
+  const { cartItems, status, error } = useSelector(state => state.cart);
+  // Sepet toplam tutarını selector ile alıyoruz
+  const cartTotal = useSelector(selectCartTotal);
+  const dispatch = useDispatch();
   const navigate = useNavigate();
-  const [cartItems, setCartItems] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [cartTotal, setCartTotal] = useState(0);
 
+  // Kullanıcı giriş yaptığında sepeti backend'den çekiyoruz
   useEffect(() => {
     if (isLoggedIn && userId) {
-      fetchUserCart();
-    } else {
-      setLoading(false);
+      dispatch(fetchCartFromBackend(userId));
     }
-  }, [isLoggedIn, userId]);
+  }, [isLoggedIn, userId, dispatch]);
 
-  const fetchUserCart = async () => {
-    try {
-      const token = localStorage.getItem('token');
-      const response = await fetch(`https://localhost:7098/api/CartItem/user/${userId}`, {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        }
-      });
-      if (response.ok) {
-        const data = await response.json();
-        setCartItems(data || []);
-        calculateTotal(data || []);
-      } else {
-        console.error('Sepet yüklenemedi:', response.status);
-        setCartItems([]);
-      }
-    } catch (error) {
-      console.error('Sepet yüklenirken hata:', error);
-      setCartItems([]);
-    } finally {
-      setLoading(false);
-    }
-  };
+  // Ürün miktarını güncelleme fonksiyonu
+  const handleUpdateQuantity = async (itemId, newQuantity) => {
+    const item = cartItems.find(i => i.id === itemId);
+    if (!item) return;
+    const stock = typeof item.stock === 'number' ? item.stock : 99;
 
-  const calculateTotal = (items) => {
-    const total = items.reduce((sum, item) => {
-      const price = item.product?.price || 0;
-      const quantity = item.quantity || 1;
-      return sum + (price * quantity);
-    }, 0);
-    setCartTotal(total);
-  };
-
-  const updateQuantity = async (cartItemId, newQuantity, productId) => {
     if (newQuantity < 1) return;
-
-    const cartItem = cartItems.find(item => item.id === cartItemId);
-    if (!cartItem) return;
-    const stock = typeof cartItem.product?.stock === 'number' ? cartItem.product.stock : 0;
-    const currentQuantity = cartItem.quantity || 1;
-
     if (newQuantity > stock) {
       alert(`Stok yetersiz! Bu üründen maksimum ${stock} adet ekleyebilirsiniz.`);
       return;
     }
 
     try {
-      const token = localStorage.getItem('token');
-      if (newQuantity > currentQuantity) {
-        // Fark kadar ekle
-        const diff = newQuantity - currentQuantity;
-        const response = await fetch('https://localhost:7098/api/CartItem', {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            userId: userId,
-            productId: productId,
-            quantity: diff
-          })
+      // Önce ürünü tamamen sil
+      await apiDelete(`https://localhost:7098/api/CartItem/${itemId}`);
+      // Sonra yeni miktar > 0 ise tekrar ekle
+      if (newQuantity > 0) {
+        await apiPost('https://localhost:7098/api/CartItem', {
+          userId: userId,
+          productId: item.productId,
+          quantity: newQuantity
         });
-        if (!response.ok) throw new Error();
-      } else if (newQuantity < currentQuantity) {
-        // Azaltma için: önce sil, sonra yeni miktarla ekle
-        // 1. Ürünü sil
-        await fetch(`https://localhost:7098/api/CartItem/${cartItemId}`, {
-          method: 'DELETE',
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json'
-          }
-        });
-        // 2. Yeni miktar > 0 ise tekrar ekle
-        if (newQuantity > 0) {
-          const response = await fetch('https://localhost:7098/api/CartItem', {
-            method: 'POST',
-            headers: {
-              'Authorization': `Bearer ${token}`,
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-              userId: userId,
-              productId: productId,
-              quantity: newQuantity
-            })
-          });
-          if (!response.ok) throw new Error();
-        }
       }
-      await fetchUserCart();
-      fetchCartFromBackend();
+      await dispatch(fetchCartFromBackend(userId));
     } catch (error) {
-      alert('Miktar güncellenirken bir hata oluştu!');
+      alert('Miktar güncellenirken hata oluştu! ' + parseApiError(error));
+      await dispatch(fetchCartFromBackend(userId));
     }
   };
 
-  const removeFromCart = async (cartItemId) => {
+  // Sepetten ürün çıkarma fonksiyonu
+  const handleRemoveFromCart = async (cartItemId) => {
     try {
-      const token = localStorage.getItem('token');
-      const response = await fetch(`https://localhost:7098/api/CartItem/${cartItemId}`, {
-        method: 'DELETE',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        }
-      });
-
-      if (response.ok) {
-        fetchUserCart(); // Sepeti yenile
-        fetchCartFromBackend(); // CartContext'i güncelle
-      } else {
-        console.error('Ürün kaldırılamadı:', response.status);
-      }
+      await apiDelete(`https://localhost:7098/api/CartItem/${cartItemId}`);
+      await dispatch(fetchCartFromBackend(userId));
     } catch (error) {
-      console.error('Ürün kaldırılırken hata:', error);
+      alert('Ürün kaldırılırken hata oluştu! ' + parseApiError(error));
+      await dispatch(fetchCartFromBackend(userId));
     }
   };
 
-  const clearCart = async () => {
+  // Sepeti temizleme fonksiyonu
+  const handleClearCart = async () => {
+    dispatch(clearCart());
     try {
-      const token = localStorage.getItem('token');
-      const response = await fetch(`https://localhost:7098/api/CartItem/user/${userId}`, {
-        method: 'DELETE',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        }
-      });
-
-      if (response.ok) {
-        setCartItems([]);
-        setCartTotal(0);
-        fetchCartFromBackend(); // CartContext'i güncelle
-      } else {
-        console.error('Sepet temizlenemedi:', response.status);
-      }
+      await apiDelete(`https://localhost:7098/api/CartItem/user/${userId}`);
+      await dispatch(fetchCartFromBackend(userId));
     } catch (error) {
-      console.error('Sepet temizlenirken hata:', error);
+      alert('Sepet temizlenirken hata oluştu! ' + parseApiError(error));
+      await dispatch(fetchCartFromBackend(userId));
     }
   };
 
+  // Alışverişi tamamlama fonksiyonu
   const handleCheckout = () => {
     if (cartItems.length === 0) {
       alert('Sepetiniz boş!');
@@ -172,10 +85,12 @@ const CartPage = ({ darkMode }) => {
     navigate('/checkout');
   };
 
-  if (loading) {
+  // Yüklenme durumu
+  if (status === 'loading') {
     return <div className="cart-page">Yükleniyor...</div>;
   }
 
+  // Kullanıcı giriş yapmamışsa
   if (!isLoggedIn || !userId) {
     return (
       <div className={`cart-page ${darkMode ? 'dark' : ''}`}>
@@ -198,17 +113,17 @@ const CartPage = ({ darkMode }) => {
         <div className="cart-content">
           <div className="cart-items">
             {cartItems.map(item => {
-              const stock = typeof item.product?.stock === 'number' ? item.product.stock : 0;
+              // Ürün stok ve miktar bilgisi
+              const stock = typeof item.stock === 'number' ? item.stock : 0;
               const currentQuantity = item.quantity || 1;
-              const itemTotal = (item.product?.price || 0) * currentQuantity;
-              
+              const itemTotal = (item.price || 0) * currentQuantity;
               return (
                 <div key={item.id} className="cart-item">
                   <img 
-                    src={item.product?.imageUrl || '/images/default-product.jpg'} 
-                    alt={item.product?.name || 'Ürün'} 
+                    src={item.image || '/images/default-product.jpg'} 
+                    alt={item.name || 'Ürün'} 
                     className="cart-item-image"
-                    onClick={() => navigate(`/products/${item.product?.id}`)}
+                    onClick={() => navigate(`/products/${item.id}`)}
                     style={{ cursor: 'pointer' }}
                     onError={(e) => {
                       e.target.src = '/images/default-product.jpg';
@@ -217,14 +132,14 @@ const CartPage = ({ darkMode }) => {
                   <div className="cart-item-info">
                     <h4 
                       style={{ cursor: 'pointer', color: '#007bff', textDecoration: 'underline' }}
-                      onClick={() => navigate(`/products/${item.product?.id}`)}
+                      onClick={() => navigate(`/products/${item.id}`)}
                     >
-                      {item.product?.name || 'Ürün İsmi Yok'}
+                      {item.name || 'Ürün İsmi Yok'}
                     </h4>
-                    <p className="cart-item-price">{(item.product?.price || 0).toFixed(2)}₺</p>
+                    <p className="cart-item-price">{(item.price || 0).toFixed(2)}₺</p>
                     <div className="cart-item-qty">
                       <button 
-                        onClick={() => updateQuantity(item.id, currentQuantity - 1, item.product?.id)} 
+                        onClick={() => handleUpdateQuantity(item.id, currentQuantity - 1)} 
                         disabled={currentQuantity <= 1}
                         className="qty-btn"
                       >
@@ -232,7 +147,7 @@ const CartPage = ({ darkMode }) => {
                       </button>
                       <span>{currentQuantity}</span>
                       <button 
-                        onClick={() => updateQuantity(item.id, currentQuantity + 1, item.product?.id)}
+                        onClick={() => handleUpdateQuantity(item.id, currentQuantity + 1)}
                         className="qty-btn"
                         disabled={currentQuantity >= stock}
                       >
@@ -243,7 +158,7 @@ const CartPage = ({ darkMode }) => {
                       {itemTotal.toFixed(2)}₺
                     </p>
                     <button 
-                      onClick={() => removeFromCart(item.id)}
+                      onClick={() => handleRemoveFromCart(item.id)}
                       className="btn-remove"
                     >
                       Kaldır
@@ -268,15 +183,15 @@ const CartPage = ({ darkMode }) => {
               <span>{cartTotal.toFixed(2)}₺</span>
             </div>
             <div className="cart-actions">
-              <button onClick={clearCart} className="btn-secondary">
+              <button onClick={handleClearCart} className="btn-secondary">
                 Sepeti Temizle
               </button>
               <Link to="/" className="btn-secondary">
                 Alışverişe Devam Et
               </Link>
-              <Link to="" className="btn-secondary">
+              <button onClick={handleCheckout} className="btn-secondary">
                 Alışverişi Tamamla
-              </Link>
+              </button>
             </div>
           </div>
         </div>
@@ -285,4 +200,9 @@ const CartPage = ({ darkMode }) => {
   );
 };
 
-export default CartPage; 
+export default CartPage;
+// Açıklama: Bu sayfa, sepet işlemlerini Redux Toolkit ile merkezi olarak yönetir. Tüm işlemler (ekleme, çıkarma, miktar güncelleme, temizleme) slice üzerinden yapılır. Kodun her adımında Türkçe açıklamalar eklenmiştir. 
+// Açıklama: handleUpdateQuantity fonksiyonu artık miktar artırma veya azaltmada önce ürünü siler, sonra yeni miktar kadar tekrar ekler. Kodun her adımında Türkçe açıklamalar eklenmiştir. 
+// Açıklama: handleUpdateQuantity azaltma için önce sil, sonra yeni miktar kadar ekler. handleRemoveFromCart sadece apiDelete ve fetchCartFromBackend ile çalışır. Kodun her adımında Türkçe açıklamalar eklenmiştir. 
+// Açıklama: Stok kontrolü sadece artırma yönünde yapılır. Sepet verisinde artık ürünün stok bilgisi de bulunur. Kodun her adımında Türkçe açıklamalar eklenmiştir. 
+// Açıklama: handleRemoveFromCart fonksiyonu ve kaldır butonu artık backend'in beklediği cartItemId ile çalışır. Kodun her adımında Türkçe açıklamalar eklenmiştir. 

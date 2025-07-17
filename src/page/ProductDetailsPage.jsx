@@ -17,15 +17,21 @@ import axios from 'axios';
 import ReviewForm from '../components/ReviewForm';
 import ReviewItem from '../components/ReviewItem';
 import '../css/ProductDetailsPage.css';
-import { useCart } from '../components/CartContext';
-import { useUser } from '../components/UserContext';
-import { useFavorites } from '../components/FavoriteContext';
+import { useSelector, useDispatch } from 'react-redux'; // Redux hook'ları
+import { addToCart, fetchCartFromBackend } from '../store/cartSlice'; // Sepet işlemleri
+import { fetchFavorites, addFavorite, removeFavorite } from '../store/favoriteSlice'; // Favori işlemleri
+import { apiGet, apiPost, parseApiError } from '../utils/api'; // Ortak API fonksiyonları
 
 const ProductDetailsPage = ({ darkMode }) => {
   const { id } = useParams();
   const navigate = useNavigate();
-  const { userId, isLoggedIn } = useUser();
-  const { favorites, toggleFavorite, fetchFavorites } = useFavorites();
+  // Kullanıcı bilgilerini Redux store'dan alıyoruz
+  const { userId, isLoggedIn } = useSelector(state => state.user);
+  // Sepet verilerini Redux store'dan alıyoruz
+  const { cartItems } = useSelector(state => state.cart);
+  const dispatch = useDispatch();
+  // Favori verilerini Redux store'dan alıyoruz
+  const { favorites } = useSelector(state => state.favorite);
   const [product, setProduct] = useState(null);
   const [loading, setLoading] = useState(true);
   const [selectedImage, setSelectedImage] = useState(0);
@@ -34,60 +40,60 @@ const ProductDetailsPage = ({ darkMode }) => {
   const [reviews, setReviews] = useState([]);
   const [showReviewForm, setShowReviewForm] = useState(false);
   const [isFavoriteLoading, setIsFavoriteLoading] = useState(false);
-  const { addToCart, fetchCartFromBackend, cartItems } = useCart();
   const images = product?.imageUrl ? [product.imageUrl] : [];
   const mainImage = images[selectedImage] || product?.imageUrl || '';
 
-  // Check if product is favorited
+  // Ürün favori mi?
   const isFavorited = favorites.some(fav => fav.productId === parseInt(id));
 
   // Stok ve sepetteki miktar
   const stock = typeof product?.stock === 'number' ? product.stock : 0;
+  // Sepetteki mevcut miktar
   const cartItem = cartItems.find(item => item.id === (product?.id || parseInt(id)));
   const cartQuantity = cartItem ? cartItem.quantity : 0;
 
-  // Ürün detaylarını, ilgili ürünleri ve yorumları çek
+  // useEffect ile ürün, ilgili ürünler ve yorumları çekme
   useEffect(() => {
     const fetchData = async () => {
       try {
         setLoading(true);
         const [productRes, relatedRes, reviewsRes] = await Promise.all([
-          axios.get(`https://localhost:7098/api/Product/${id}`),
-          axios.get(`https://localhost:7098/api/Product/related/${id}`),
-          axios.get(`https://localhost:7098/api/Review?productId=${id}`)
+          apiGet(`https://localhost:7098/api/Product/${id}`),
+          apiGet(`https://localhost:7098/api/Product/related/${id}`),
+          apiGet(`https://localhost:7098/api/Review?productId=${id}`)
         ]);
-        setProduct(productRes.data);
-        setRelatedProducts(relatedRes.data || []);
-        setReviews(reviewsRes.data || []);
+        setProduct(productRes);
+        setRelatedProducts(relatedRes || []);
+        setReviews(reviewsRes || []);
       } catch (error) {
         console.error('Veri çekme hatası:', error);
         if (error.response?.status === 404) {
-          // Ürün bulunamadı
           setProduct(null);
         }
       } finally {
         setLoading(false);
       }
     };
-
     if (id) {
       fetchData();
     }
   }, [id]);
 
+  // Favori butonuna tıklanınca
   const handleFavoriteClick = async () => {
     if (!isLoggedIn) {
       alert('Favorilere eklemek için giriş yapmalısınız!');
       return;
     }
-
     setIsFavoriteLoading(true);
     try {
-      await toggleFavorite(parseInt(id));
-      // Header'ı güncelle
-      fetchFavorites();
+      if (isFavorited) {
+        await dispatch(removeFavorite(parseInt(id)));
+      } else {
+        await dispatch(addFavorite(parseInt(id)));
+      }
+      await dispatch(fetchFavorites());
     } catch (error) {
-      console.error('Favori işlemi başarısız:', error);
       alert('Favori işlemi başarısız oldu!');
     } finally {
       setIsFavoriteLoading(false);
@@ -100,6 +106,7 @@ const ProductDetailsPage = ({ darkMode }) => {
     setQuantity(newValue);
   };
 
+  // Sepete ekle butonuna tıklandığında çalışır
   const handleAddToCart = async () => {
     if (!isLoggedIn) {
       alert('Sepete eklemek için giriş yapmalısınız!');
@@ -113,49 +120,32 @@ const ProductDetailsPage = ({ darkMode }) => {
       alert(`Stok yetersiz! Bu üründen maksimum ${stock} adet ekleyebilirsiniz.`);
       return;
     }
-
     try {
-      const token = localStorage.getItem('token');
-      // Backend'e sepete ekle
-      const response = await axios.post('https://localhost:7098/api/CartItem', {
+      // Ortak API fonksiyonu ile backend'e sepete ekle
+      await apiPost('https://localhost:7098/api/CartItem', {
         userId: userId,
         productId: product.id,
         quantity: quantity
-      }, {
-        headers: { 
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        }
       });
-
-      if (response.status === 200) {
-        // Frontend CartContext'e de ekle
-        const item = {
-          id: product.id,
-          name: product.name,
-          price: product.price || 0,
-          image: product.imageUrl,
-          quantity: quantity
-        };
-        addToCart(item);
-        // Header'ı güncelle
-        fetchCartFromBackend();
-        // Başarı mesajı
-        alert('Ürün sepete eklendi!');
-        // Sepet animasyonu için
-        const cartButton = document.querySelector('.cart-notification');
-        if (cartButton) {
-          cartButton.classList.add('animate');
-          setTimeout(() => cartButton.classList.remove('animate'), 1000);
-        }
+      // Redux ile frontend sepetine ekle
+      dispatch(addToCart({
+        id: product.id,
+        name: product.name,
+        price: product.price || 0,
+        image: product.imageUrl,
+        quantity: quantity
+      }));
+      // Sepeti backend'den güncelle
+      dispatch(fetchCartFromBackend(userId));
+      alert('Ürün sepete eklendi!');
+      // Sepet animasyonu için
+      const cartButton = document.querySelector('.cart-notification');
+      if (cartButton) {
+        cartButton.classList.add('animate');
+        setTimeout(() => cartButton.classList.remove('animate'), 1000);
       }
     } catch (error) {
-      console.error('Sepete ekleme hatası:', error);
-      if (error.response) {
-        console.error('Response data:', error.response.data);
-        console.error('Response status:', error.response.status);
-      }
-      alert('Sepete ekleme başarısız oldu!');
+      alert('Sepete ekleme başarısız oldu! ' + parseApiError(error));
     }
   };
 
