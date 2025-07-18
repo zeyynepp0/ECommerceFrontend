@@ -14,6 +14,8 @@ import '../css/ProductsPage.css';
 import { useCart } from '../components/CartContext';
 import { apiGet, parseApiError } from '../utils/api'; // Ortak API fonksiyonları
 
+const API_BASE = "https://localhost:7098";
+
 const ProductsPage = ({ darkMode }) => {
   const [products, setProducts] = useState([]);
   const [filteredProducts, setFilteredProducts] = useState([]);
@@ -257,7 +259,7 @@ const ProductsPage = ({ darkMode }) => {
               {filteredProducts.map(product => (
                 <ProductCard 
                   key={product.id} 
-                  product={product} 
+                  product={{...product, imageUrl: product.imageUrl ? (product.imageUrl.startsWith('http') ? product.imageUrl : API_BASE + product.imageUrl) : '/images/default-product.jpg'}} 
                   darkMode={darkMode}
                   onFavoriteChange={handleFavoriteChange}
                 />

@@ -8,6 +8,8 @@ export const FavoriteProvider = ({ children }) => {
   const userId = localStorage.getItem('userId');
   const token = localStorage.getItem('token');
 
+  const API_BASE = "https://localhost:7098";
+
   const fetchFavorites = async () => {
     if (!userId || !token) return;
 
@@ -15,7 +17,10 @@ export const FavoriteProvider = ({ children }) => {
       const res = await axios.get(`https://localhost:7098/api/Favorite/user/${userId}`, {
         headers: { Authorization: `Bearer ${token}` }
       });
-      setFavorites(res.data);
+      setFavorites(res.data.map(fav => ({
+        ...fav,
+        imageUrl: fav.imageUrl ? (fav.imageUrl.startsWith('http') ? fav.imageUrl : API_BASE + fav.imageUrl) : '/images/default-product.jpg'
+      })));
     } catch (err) {
       console.error("Favoriler alınamadı:", err);
     }

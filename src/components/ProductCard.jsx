@@ -126,7 +126,7 @@ const ProductCard = ({ product, darkMode, onFavoriteChange }) => {
         />
       </Link>
       <div className="product-info">
-        <span className="product-category">{product.category?.name || "Kategori Yok"}</span>
+        <span className="product-category">{product.categoryName || "Kategori Yok"}</span>
         <h3 className="product-title">
           <Link to={`/products/${product.id}`}>{product.name || "Ürün İsmi Yok"}</Link>
         </h3>

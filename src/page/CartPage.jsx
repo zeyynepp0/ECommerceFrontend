@@ -6,6 +6,8 @@ import { Link, useNavigate } from 'react-router-dom';
 import '../css/CartPage.css';
 import { apiDelete, apiPost, parseApiError } from '../utils/api'; // Ortak API fonksiyonları
 
+const API_BASE = "https://localhost:7098";
+
 const CartPage = ({ darkMode }) => {
   // Redux store'dan kullanıcı bilgilerini alıyoruz
   const { userId, isLoggedIn } = useSelector(state => state.user);
@@ -120,7 +122,7 @@ const CartPage = ({ darkMode }) => {
               return (
                 <div key={item.id} className="cart-item">
                   <img 
-                    src={item.image || '/images/default-product.jpg'} 
+                    src={item.image ? (item.image.startsWith('http') ? item.image : API_BASE + item.image) : '/images/default-product.jpg'} 
                     alt={item.name || 'Ürün'} 
                     className="cart-item-image"
                     onClick={() => navigate(`/products/${item.id}`)}

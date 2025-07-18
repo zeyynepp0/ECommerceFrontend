@@ -20,7 +20,9 @@ import '../css/ProductDetailsPage.css';
 import { useSelector, useDispatch } from 'react-redux'; // Redux hook'ları
 import { addToCart, fetchCartFromBackend } from '../store/cartSlice'; // Sepet işlemleri
 import { fetchFavorites, addFavorite, removeFavorite } from '../store/favoriteSlice'; // Favori işlemleri
-import { apiGet, apiPost, parseApiError } from '../utils/api'; // Ortak API fonksiyonları
+import { apiGet, apiPost, apiPut, apiDelete, parseApiError } from '../utils/api'; // Ortak API fonksiyonları
+
+const API_BASE = "https://localhost:7098";
 
 const ProductDetailsPage = ({ darkMode }) => {
   const { id } = useParams();
@@ -40,8 +42,9 @@ const ProductDetailsPage = ({ darkMode }) => {
   const [reviews, setReviews] = useState([]);
   const [showReviewForm, setShowReviewForm] = useState(false);
   const [isFavoriteLoading, setIsFavoriteLoading] = useState(false);
-  const images = product?.imageUrl ? [product.imageUrl] : [];
-  const mainImage = images[selectedImage] || product?.imageUrl || '';
+  const [editingReview, setEditingReview] = useState(null);
+  const images = product?.imageUrl ? [product.imageUrl.startsWith('http') ? product.imageUrl : API_BASE + product.imageUrl] : [];
+  const mainImage = images[selectedImage] || (product?.imageUrl ? (product.imageUrl.startsWith('http') ? product.imageUrl : API_BASE + product.imageUrl) : '');
 
   // Ürün favori mi?
   const isFavorited = favorites.some(fav => fav.productId === parseInt(id));
@@ -149,15 +152,68 @@ const ProductDetailsPage = ({ darkMode }) => {
     }
   };
 
-  const handleReviewSubmit = (reviewData) => {
-    // API'ye yorum gönderme
-    axios.post('/api/reviews', { ...reviewData, productId: id })
-      .then(res => {
-        setReviews([...reviews, res.data]);
-        setShowReviewForm(false);
-      })
-      .catch(err => console.error('Yorum gönderme hatası:', err));
+  // Yorum ekleme/güncelleme
+  const handleReviewSubmit = async (reviewData) => {
+    if (!isLoggedIn || !userId) {
+      alert('Yorum yapmak için giriş yapmalısınız!');
+      return;
+    }
+    if (!reviewData.comment || !reviewData.rating) {
+      alert('Yorum ve puan zorunludur!');
+      return;
+    }
+    const payload = {
+      productId: parseInt(id),
+      userId: parseInt(userId),
+      comment: reviewData.comment,
+      rating: reviewData.rating
+    };
+    if (!payload.productId || !payload.userId || !payload.comment || !payload.rating) {
+      alert('Eksik veya hatalı veri!');
+      return;
+    }
+    try {
+      console.log('Yorum gönder payload:', payload);
+      if (reviewData.isUpdate && reviewData.reviewId) {
+        // Güncelleme
+        await apiPut(`https://localhost:7098/api/Review`, {
+          id: reviewData.reviewId,
+          content: reviewData.comment,
+          rating: reviewData.rating,
+          lastModifiedBy: 'user'
+        });
+        setReviews(reviews.map(r => r.id === reviewData.reviewId ? { ...r, comment: reviewData.comment, rating: reviewData.rating, lastModifiedBy: 'user', lastModifiedAt: new Date().toISOString() } : r));
+      } else {
+        // Ekleme
+        const res = await apiPost(`https://localhost:7098/api/Review`, payload);
+        setReviews([...reviews, res]);
+      }
+      setShowReviewForm(false);
+      setEditingReview(null);
+    } catch (err) {
+      alert('Yorum gönderilemedi: ' + parseApiError(err));
+    }
   };
+
+  // Yorum silme
+  const handleReviewDelete = async (review) => {
+    if (!window.confirm('Yorumu silmek istediğinize emin misiniz?')) return;
+    try {
+      await apiDelete(`https://localhost:7098/api/Review/${review.id}?deletedBy=user`);
+      setReviews(reviews.map(r => r.id === review.id ? { ...r, comment: 'Bu yorum silinmiştir' } : r));
+    } catch (err) {
+      alert('Yorum silinemedi: ' + parseApiError(err));
+    }
+  };
+
+  // Yorum düzenleme
+  const handleReviewEdit = (review) => {
+    setEditingReview(review);
+    setShowReviewForm(true);
+  };
+
+  // Sadece o ürüne ait yorumlar
+  const filteredReviews = reviews.filter(r => r.productId === parseInt(id));
 
   if (loading) {
     return (
@@ -348,7 +404,7 @@ const ProductDetailsPage = ({ darkMode }) => {
         <div className="product-reviews">
           <div className="reviews-header">
             <h2>
-              <FiMessageSquare /> Kullanıcı Yorumları ({reviews.length})
+              <FiMessageSquare /> Kullanıcı Yorumları ({filteredReviews.length})
             </h2>
             <button 
               className="add-review-button"
@@ -362,16 +418,20 @@ const ProductDetailsPage = ({ darkMode }) => {
             <ReviewForm 
               onSubmit={handleReviewSubmit}
               darkMode={darkMode}
+              review={editingReview}
             />
           )}
 
-          {reviews && reviews.length > 0 ? (
+          {filteredReviews && filteredReviews.length > 0 ? (
             <div className="reviews-list">
-              {reviews.map(review => (
+              {filteredReviews.map(review => (
                 <ReviewItem 
                   key={review.id}
                   review={review}
                   darkMode={darkMode}
+                  isOwn={isLoggedIn && review.userId === userId}
+                  onEdit={handleReviewEdit}
+                  onDelete={handleReviewDelete}
                 />
               ))}
             </div>
@@ -389,7 +449,7 @@ const ProductDetailsPage = ({ darkMode }) => {
                 <div key={product.id} className="related-product-card">
                   <Link to={`/products/${product.id}`} className="related-product-image">
                     <img 
-                      src={product.imageUrl || '/images/default-product.jpg'} 
+                      src={product.imageUrl ? (product.imageUrl.startsWith('http') ? product.imageUrl : API_BASE + product.imageUrl) : '/images/default-product.jpg'} 
                       alt={product.name}
                       onError={(e) => {
                         e.target.src = '/images/default-product.jpg';

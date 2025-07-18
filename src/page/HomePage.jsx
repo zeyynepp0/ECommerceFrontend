@@ -10,6 +10,8 @@ import { useCart } from '../components/CartContext';
 import axios from 'axios';
 import { apiGet, parseApiError } from '../utils/api'; // Ortak API fonksiyonları
 
+const API_BASE = "https://localhost:7098";
+
 const HomePage = ({ darkMode, setDarkMode }) => {
   // Kullanıcı bilgilerini Redux store'dan alıyoruz
   const { isLoggedIn, userId } = useSelector(state => state.user);
@@ -77,10 +79,30 @@ const HomePage = ({ darkMode, setDarkMode }) => {
       <main className="home-container">
         {/* Hero Banner */}
         <section className="hero-banner">
-          <div className="hero-content">
-            <h1>Yeni Sezon Ürünler Keşfedin</h1>
-            <p>%30'a varan indirimler sizi bekliyor</p>
-            <Link to="/products" className="cta-button">Alışverişe Başla</Link>
+          <div className="hero-video-wrapper">
+            <video className="hero-video-bg" autoPlay loop muted playsInline poster="/images/default-category.jpg">
+              <source src="/videos/hero.mp4" type="video/mp4" />
+              Tarayıcınız video etiketini desteklemiyor.
+            </video>
+          </div>
+          <div className="hero-overlay">
+            <div className="hero-content">
+              <h1>Yeni Sezon Ürünler Keşfedin</h1>
+              <p>%30'a varan indirimler sizi bekliyor</p>
+              <Link to="/products" className="cta-button">Alışverişe Başla</Link>
+            </div>
+            <div className="hero-search">
+              <input
+                type="text"
+                placeholder="Ürün ara..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                onKeyPress={handleKeyPress}
+              />
+              <button className="search-button" onClick={handleSearch}>
+                <FiSearch size={20} />
+              </button>
+            </div>
           </div>
         </section>
 
@@ -113,7 +135,7 @@ const HomePage = ({ darkMode, setDarkMode }) => {
                 >
                   <div className="category-image">
                     <img 
-                      src={category.imageUrl || '/images/default-category.jpg'} 
+                      src={category.imageUrl ? (category.imageUrl.startsWith('http') ? category.imageUrl : API_BASE + category.imageUrl) : '/images/default-category.jpg'} 
                       alt={category.name}
                       onError={(e) => {
                         e.target.src = '/images/default-category.jpg';
@@ -138,7 +160,7 @@ const HomePage = ({ darkMode, setDarkMode }) => {
                 {filteredProducts.slice(0, 8).map(product => (
                   <ProductCard 
                     key={product.id} 
-                    product={product} 
+                    product={{...product, imageUrl: product.imageUrl ? (product.imageUrl.startsWith('http') ? product.imageUrl : API_BASE + product.imageUrl) : '/images/default-product.jpg'}} 
                     darkMode={darkMode}
                     onFavoriteChange={handleFavoriteChange}
                   />

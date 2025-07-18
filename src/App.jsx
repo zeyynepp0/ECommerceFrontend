@@ -12,8 +12,9 @@ import './App.css';
 import axios from 'axios';
 import CartPage from './page/CartPage';
 import CheckoutPage from './page/CheckoutPage';
-import { FavoriteProvider } from './components/FavoriteContext';
+//import { FavoriteProvider } from './components/FavoriteContext';
 import ProfilePage from './page/ProfilePage';
+import AdminRoutes from './admin/routes/AdminRoutes';
 
 const API = axios.create({
   baseURL: 'https://your-api-endpoint.com/api',
@@ -46,6 +47,8 @@ function App() {
           <Route path="/profile/:userId" element={<ProfilePage darkMode={darkMode} />} />
           <Route path="/login" element={<LoginPage darkMode={darkMode} />} />
           <Route path="/register" element={<RegisterPage darkMode={darkMode} />} />
+          {/* Admin paneli için nested route */}
+          <Route path="/admin/*" element={<AdminRoutes />} />
         </Routes>
 
       <div className={`app ${darkMode ? 'dark' : ''}`}></div>

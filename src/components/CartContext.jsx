@@ -1,6 +1,7 @@
 import React, { createContext, useState, useContext } from 'react';
 
 const CartContext = createContext();
+const API_BASE = "https://localhost:7098";
 
 export const CartProvider = ({ children }) => {
   const [cartItems, setCartItems] = useState([]);
@@ -9,14 +10,15 @@ export const CartProvider = ({ children }) => {
   const addToCart = (item) => {
     setCartItems(prevItems => {
       const existingItem = prevItems.find(i => i.id === item.id);
+      const imageUrl = item.image ? (item.image.startsWith('http') ? item.image : API_BASE + item.image) : '/images/default-product.jpg';
       if (existingItem) {
         return prevItems.map(i =>
           i.id === item.id 
-            ? { ...i, quantity: i.quantity + item.quantity }
+            ? { ...i, quantity: i.quantity + item.quantity, image: imageUrl }
             : i
         );
       }
-      return [...prevItems, item];
+      return [...prevItems, { ...item, image: imageUrl }];
     });
   };
 

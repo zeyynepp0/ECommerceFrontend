@@ -46,6 +46,7 @@ const Header = ({ darkMode, setDarkMode }) => {
   const { isLoggedIn, userId } = useSelector(state => state.user);
   // Favori verilerini Redux store'dan alıyoruz
   const favoritesCount = useSelector(selectFavoritesCount);
+  const isAdmin = localStorage.getItem('role') === 'Admin';
 
   const openAuthModal = (mode) => {
     setAuthMode(mode);
@@ -144,6 +145,12 @@ const Header = ({ darkMode, setDarkMode }) => {
           </div>
 
           <div className="header-right">
+            {/* Admin Paneli butonu: Sadece admin giriş yaptıysa görünür */}
+            {isAdmin && (
+              <Link to="/admin" className="admin-panel-btn">
+                Admin Paneli
+              </Link>
+            )}
             <div className="profile-section">
               <button 
                 className="profile-button"
@@ -227,6 +234,15 @@ const Header = ({ darkMode, setDarkMode }) => {
         <div className="container">
           <nav className="main-nav">
             <ul className="nav-list">
+              {/* Admin Paneli menüde de gösterilebilir */}
+              {isAdmin && (
+                <li className="nav-item">
+                  <Link to="/admin" className="nav-link">
+                    <FiUser size={16} />
+                    Admin Paneli
+                  </Link>
+                </li>
+              )}
               <li className="nav-item">
                 <Link to="/" className="nav-link" onClick={refreshHeader}>
                   <FiHome size={16} />

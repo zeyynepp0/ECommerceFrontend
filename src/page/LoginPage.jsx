@@ -58,19 +58,28 @@ const LoginPage = ({ darkMode }) => {
             setIsLoading(true);
             setError('');
             try {
-              // Ortak API fonksiyonu ile backend'e login isteği gönder
-              const payload = new FormData();
-              payload.append('Email', values.email);
-              payload.append('Password', values.password);
-              const response = await apiPost('https://localhost:7098/api/User/login', payload);
+              // const payload = new FormData();
+              // payload.append('Email', values.email);
+              // payload.append('Password', values.password);
+              // Eğer e-posta admin ise admin login endpointine, değilse user login endpointine istek at
+              const isAdmin = values.email.endsWith('@mail.com') || values.email.toLowerCase().includes('admin');
+              const loginUrl = isAdmin ? 'https://localhost:7098/api/Admin/login' : 'https://localhost:7098/api/User/login';
+
+              // JSON olarak gönder
+              const payload = {
+                Email: values.email,
+                Password: values.password
+              };
+              const response = await apiPost(loginUrl, payload);
               const token = response.token;
               localStorage.setItem('isLoggedIn', 'true');
               localStorage.setItem('token', token);
-              // JWT'den userId'yi decode et
+              // JWT'den userId ve rolü decode et
               const decoded = jwtDecode(token);
               const userId =
                 decoded['http://schemas.xmlsoap.org/ws/2005/05/identity/claims/nameidentifier'] ||
                 decoded.nameid || decoded.sub || decoded.id || decoded.userId;
+              const role = decoded['http://schemas.microsoft.com/ws/2008/06/identity/claims/role'] || decoded.role;
               if (!userId) {
                 setError('Kullanıcı ID alınamadı. Lütfen tekrar deneyin.');
                 setIsLoading(false);
@@ -78,9 +87,13 @@ const LoginPage = ({ darkMode }) => {
                 return;
               }
               localStorage.setItem('userId', userId);
-              // Başarılı girişte Redux ile kullanıcıyı güncelle
+              localStorage.setItem('role', role);
               dispatch(login({ userId: userId, token: token }));
-              navigate(`/profile/${userId}`);
+              if (role === 'Admin') {
+                navigate('/admin');
+              } else {
+                navigate(`/profile/${userId}`);
+              }
             } catch (error) {
               setError(parseApiError(error));
             } finally {

@@ -5,7 +5,7 @@ import { fetchFavorites, removeFavorite } from '../store/favoriteSlice'; // Favo
 import { useNavigate, useParams } from 'react-router-dom';
 import { useSearchParams } from 'react-router-dom';
 import '../css/ProfilePage.css';
-import { useFavorites } from '../components/FavoriteContext';
+//import { useFavorites } from '../components/FavoriteContext';
 import { Formik, Form, Field, ErrorMessage } from 'formik'; // Formik ile form yönetimi
 import * as Yup from 'yup'; // Yup ile validasyon
 import { apiGet, apiPost, apiPut, apiDelete } from '../utils/api'; // Ortak API fonksiyonları
@@ -32,6 +32,7 @@ const [activeTab, setActiveTab] = useState(tabFromUrl || 'profile');
   const dispatch = useDispatch();
   const [favoriteProducts, setFavoriteProducts] = useState([]);
 
+  const API_BASE = "https://localhost:7098";
 
   useEffect(() => {
     const token = localStorage.getItem('token');
@@ -78,7 +79,11 @@ const [activeTab, setActiveTab] = useState(tabFromUrl || 'profile');
             const res = await axios.get(`https://localhost:7098/api/Product/${fav.productId}`, {
               headers: { Authorization: `Bearer ${token}` }
             });
-            return res.data;
+            // imageUrl düzelt
+            return {
+              ...res.data,
+              imageUrl: res.data.imageUrl ? (res.data.imageUrl.startsWith('http') ? res.data.imageUrl : API_BASE + res.data.imageUrl) : '/images/default-product.jpg'
+            };
           })
         );
         setFavoriteProducts(productDetails);
@@ -452,7 +457,7 @@ const [activeTab, setActiveTab] = useState(tabFromUrl || 'profile');
                     >
                       <div className="favorite-image">
                         <img 
-                          src={product.imageUrl || '/images/default-product.jpg'} 
+                          src={product.imageUrl} 
                           alt={product.name} 
                           onError={e => { e.target.src = '/images/default-product.jpg'; }}
                         />
@@ -513,7 +518,7 @@ const [activeTab, setActiveTab] = useState(tabFromUrl || 'profile');
                         {order.orderItems?.map(item => (
                           <div key={item.id} className="order-item">
                             <div className="item-image">
-                              <img src={item.productImage || 'https://via.placeholder.com/50'} alt={item.productName} />
+                              <img src={item.productImage ? (item.productImage.startsWith('http') ? item.productImage : API_BASE + item.productImage) : '/images/default-product.jpg'} alt={item.productName} />
                             </div>
                             <div className="item-details">
                               <p className="item-name">{item.productName}</p>

@@ -9,12 +9,12 @@ import axios from 'axios';
  * @param {string} url - İstek yapılacak endpoint.
  * @returns {Promise<any>} - API'den dönen veri.
  */
-export const apiGet = async (url) => {
+export const apiGet = async (url, config = {}) => {
   try {
     const token = localStorage.getItem('token');
-    const response = await axios.get(url, {
-      headers: { Authorization: `Bearer ${token}` }
-    });
+    const headers = { ...(config.headers || {}) };
+    if (token) headers.Authorization = `Bearer ${token}`;
+    const response = await axios.get(url, { ...config, headers });
     return response.data;
   } catch (error) {
     throw parseApiError(error);
@@ -27,12 +27,19 @@ export const apiGet = async (url) => {
  * @param {object|FormData} data - Gönderilecek veri.
  * @returns {Promise<any>} - API'den dönen veri.
  */
-export const apiPost = async (url, data) => {
+export const apiPost = async (url, data, config = {}) => {
   try {
     const token = localStorage.getItem('token');
-    const response = await axios.post(url, data, {
-      headers: { Authorization: `Bearer ${token}` }
-    });
+    const headers = { ...(config.headers || {}) };
+    if (token) headers.Authorization = `Bearer ${token}`;
+    const isFormData = (typeof FormData !== 'undefined') && data instanceof FormData;
+    if (isFormData && headers['Content-Type']) {
+      delete headers['Content-Type'];
+    }
+    if (!isFormData) {
+      headers['Content-Type'] = 'application/json';
+    }
+    const response = await axios.post(url, data, { ...config, headers });
     return response.data;
   } catch (error) {
     throw parseApiError(error);
@@ -45,12 +52,12 @@ export const apiPost = async (url, data) => {
  * @param {object} data - Gönderilecek veri.
  * @returns {Promise<any>} - API'den dönen veri.
  */
-export const apiPut = async (url, data) => {
+export const apiPut = async (url, data, config = {}) => {
   try {
     const token = localStorage.getItem('token');
-    const response = await axios.put(url, data, {
-      headers: { Authorization: `Bearer ${token}` }
-    });
+    const headers = { ...(config.headers || {}) };
+    if (token) headers.Authorization = `Bearer ${token}`;
+    const response = await axios.put(url, data, { ...config, headers });
     return response.data;
   } catch (error) {
     throw parseApiError(error);
@@ -63,13 +70,12 @@ export const apiPut = async (url, data) => {
  * @param {object} [data] - Opsiyonel olarak gönderilecek veri.
  * @returns {Promise<any>} - API'den dönen veri.
  */
-export const apiDelete = async (url, data) => {
+export const apiDelete = async (url, data, config = {}) => {
   try {
     const token = localStorage.getItem('token');
-    const response = await axios.delete(url, {
-      headers: { Authorization: `Bearer ${token}` },
-      data
-    });
+    const headers = { ...(config.headers || {}) };
+    if (token) headers.Authorization = `Bearer ${token}`;
+    const response = await axios.delete(url, { ...config, headers, data });
     return response.data;
   } catch (error) {
     throw parseApiError(error);

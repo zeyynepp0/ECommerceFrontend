@@ -1,11 +1,19 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { FiStar, FiSend } from 'react-icons/fi';
 import '../css/ReviewForm.css';
 
-const ReviewForm = ({ onSubmit, darkMode }) => {
+const ReviewForm = ({ onSubmit, darkMode, review }) => {
   const [rating, setRating] = useState(5);
   const [comment, setComment] = useState('');
   const [name, setName] = useState('');
+
+  useEffect(() => {
+    if (review) {
+      setRating(review.rating);
+      setComment(review.comment);
+      setName(review.userFullName || '');
+    }
+  }, [review]);
 
   const handleSubmit = (e) => {
     e.preventDefault();
@@ -13,10 +21,12 @@ const ReviewForm = ({ onSubmit, darkMode }) => {
       rating,
       comment,
       name,
-      date: new Date().toISOString()
+      reviewId: review ? review.id : undefined,
+      isUpdate: !!review
     });
     setComment('');
     setName('');
+    setRating(5);
   };
 
   return (
@@ -31,9 +41,9 @@ const ReviewForm = ({ onSubmit, darkMode }) => {
           value={name}
           onChange={(e) => setName(e.target.value)}
           placeholder="İsim"
+          disabled={!!review}
         />
       </div>
-      
       <div className="form-group">
         <label>Değerlendirme</label>
         <div className="rating-stars">
@@ -47,7 +57,6 @@ const ReviewForm = ({ onSubmit, darkMode }) => {
           ))}
         </div>
       </div>
-      
       <div className="form-group">
         <label>Yorumunuz</label>
         <textarea
@@ -58,9 +67,8 @@ const ReviewForm = ({ onSubmit, darkMode }) => {
           rows="4"
         />
       </div>
-      
       <button type="submit" className="submit-review">
-        <FiSend /> Gönder
+        <FiSend /> {review ? 'Güncelle' : 'Gönder'}
       </button>
     </form>
   );
